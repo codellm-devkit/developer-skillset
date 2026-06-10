@@ -113,5 +113,6 @@ The SDK defines a parallel set of Pydantic models per language under
 `TSCallEdge`). They must mirror these field names so `Application(**json.load(...))`
 validates. The Java models (`cldk/models/java/models.py`) and the re-exported Python models
 (`cldk/models/python/__init__.py`) are the two worked examples to copy from — copy the one
-whose invocation pattern (subprocess vs in-process) matches your analyzer. See
-`python-sdk-wiring.md`.
+whose invocation pattern (subprocess vs in-process) matches your analyzer. The SDK side of
+this — the per-language models and facade — is built by the **cldk-sdk-frontend** skill (its
+`python-sdk-wiring.md`), not here.

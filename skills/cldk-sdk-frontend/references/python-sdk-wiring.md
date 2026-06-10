@@ -23,7 +23,9 @@ than committing unrelated changes.
 ## Files to create / edit (checklist)
 
 ### 1. Models — `cldk/models/<lang>/`
-- `models.py` — Pydantic models mirroring `schema-reference.md` **field-for-field** (every
+- `models.py` — Pydantic models mirroring the analyzer's emitted schema **field-for-field** (the
+  local `schema-contract.md`, backed by the **codeanalyzer-backend** skill's exhaustive
+  `schema-reference.md`) — every
   shared field, not a subset): `<L>Application`, `<L>Module`, `<L>Class`, `<L>Callable`,
   `<L>Callsite`, `<L>CallEdge`, the leaf models (Import/Comment/Parameter/Decorator/Symbol/
   VariableDeclaration/ClassAttribute), plus language node kinds (`<L>Interface`, `<L>Enum`,
@@ -32,7 +34,8 @@ than committing unrelated changes.
   `<L>Application(**json.load(f))` validates. **Build these models first** — they are both the
   SDK binding and the validation target the analyzer's output is checked against.
   These `<L>` models are also where the language's **own** node kinds and fields live: when the
-  analyzer expands the schema (`schema-reference.md`), add the matching field/model here in the
+  analyzer expands the schema (recorded in the **codeanalyzer-backend** skill's `schema-reference.md`
+  and its `SCHEMA_DECISIONS.md`), add the matching field/model here in the
   same change so output keeps validating. Pydantic ignores unknown JSON keys by default, so an
   analyzer field with no model field is silently dropped on load — define it on both sides.
   (For loud failures on drift while developing, set `model_config = ConfigDict(extra="forbid")`.)
@@ -46,7 +49,8 @@ than committing unrelated changes.
   exactly what to implement and in what priority. Back it with a backend wrapper.
 - `__init__.py` — export `<Lang>Analysis`.
 - `codeanalyzer/codeanalyzer.py` — the backend wrapper:
-  - **Subprocess pattern**: build the CLI args (`cli-contract.md`), `subprocess.run` the
+  - **Subprocess pattern**: build the CLI args (the contract the **codeanalyzer-backend** skill
+    defines in its `cli-contract.md`), `subprocess.run` the
     analyzer binary with `-o <tempdir>`, read `<tempdir>/analysis.json`, and validate into
     `<L>Application`. Resolve/version-pin the binary (see step 4). This mirrors
     `cldk/analysis/java/codeanalyzer/codeanalyzer.py`.

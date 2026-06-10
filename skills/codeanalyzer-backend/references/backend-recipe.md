@@ -123,7 +123,9 @@ Python runtime is already present). **Version it**, and have the SDK pin that ve
 
 ## Two invocation models the SDK must match
 
-How the analyzer is packaged (step 9) determines how the SDK calls it (`python-sdk-wiring.md`):
+How the analyzer is packaged (step 9) determines how the SDK calls it — the SDK side is wired by
+the **cldk-sdk-frontend** skill (its `python-sdk-wiring.md`), but the packaging choice you make here
+fixes which of these the SDK must use:
 
 - **Subprocess** (Java, and most new languages): the analyzer is a separate-language binary.
   The facade shells out, points `-o` at a temp dir, then reads and parses `analysis.json`.

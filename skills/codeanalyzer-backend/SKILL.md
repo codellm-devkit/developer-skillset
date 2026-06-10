@@ -1,45 +1,45 @@
 ---
-name: cldk-language-pack
+name: codeanalyzer-backend
 description: >-
-  Scaffold first-class support for a NEW programming language in CodeLLM-DevKit (CLDK),
-  end to end: a `codeanalyzer-<lang>` backend analyzer plus Python SDK bindings. Use this
-  whenever a CLDK maintainer wants to "add a language", "support <X> in CLDK", "build a
-  codeanalyzer for <X>", "write a CLDK language pack/backend/analyzer", or wire a new
-  language into the cldk Python SDK — even if they don't say the word "skill". The skill's
-  core move is a guided, informed decision about the analyzer's backend tooling (parser,
-  resolver, enrichment, packaging) for the target language, then scaffolding the analyzer
-  to a working, validated level-1 analysis (symbol table + resolver call graph) and registering
-  it in the SDK on a branch. Do NOT use this
-  for adding an extension/contribution point to an EXISTING analyzer (that's
-  codeanalyzer-extension-builder), or for merely *using* CLDK to analyze code.
+  Build the BACKEND language analyzer for CodeLLM-DevKit (CLDK): a
+  `codeanalyzer-<lang>` that parses a NEW programming language and emits the canonical
+  `analysis.json` (symbol table + resolver-based call graph), then packages and releases it as a
+  thin `codeanalyzer-<lang>` PyPI distribution. Use this whenever a CLDK maintainer wants to "add a
+  language", "build a codeanalyzer for <X>", "write a CLDK backend/analyzer for <X>", or
+  "support <X> in CLDK" at the analyzer level — even if they don't say the word "skill". The core
+  move is a guided, informed decision about the analyzer's backend tooling (parser, resolver,
+  enrichment, packaging) for the target language, then scaffolding a MODULAR analyzer to a working,
+  validated level-1 analysis and shipping it via tag-triggered release automation. This skill stops
+  at the analyzer; wiring the analyzer into a CLDK SDK (Python/TS/…) is the companion
+  **cldk-sdk-frontend** skill. Do NOT use this for adding an extension/contribution point to an
+  EXISTING analyzer (that's codeanalyzer-extension-builder), or for merely *using* CLDK to analyze
+  code.
 ---
 
-# CLDK language pack
+# CLDK analyzer backend
 
-Add a new language to CLDK across two surfaces in one pass:
+Build a new language's **backend analyzer** `codeanalyzer-<lang>`: it parses the language and emits
+the canonical `analysis.json` (symbol table + call graph), then ships as a thin
+`codeanalyzer-<lang>` PyPI distribution. This skill owns **one surface** — the analyzer and its
+distribution. Wiring that analyzer into a CLDK **frontend SDK** (`CLDK(language="<lang>")
+.analysis(...)` in the Python SDK, and later the TS/Rust/Go/Java SDKs) is the separate
+**cldk-sdk-frontend** skill, which consumes this skill's output. Keep that boundary: here you
+produce a validated, released analyzer + its `analysis.json` contract; the frontend skill binds it.
 
-1. **Backend analyzer** `codeanalyzer-<lang>` — parses the language and emits the canonical
-   `analysis.json` (symbol table + call graph).
-2. **Python SDK bindings** — `CLDK(language="<lang>").analysis(...)` returns a facade like
-   `JavaAnalysis`/`PythonAnalysis`.
-
-(The TypeScript SDK is intentionally **out of scope** for this skill.)
-
-The skill's defining move is **not** picking a template — it's running a guided, informed
-decision about *how to build the backend* for this specific language, then scaffolding from
-that decision. A new language's analyzer must live in that language's own ecosystem to reach
-its best tooling, so the tooling choices genuinely differ per language and the user owns
-them.
+The skill's defining move is **not** picking a template — it's running a guided, informed decision
+about *how to build the backend* for this specific language, then scaffolding from that decision. A
+new language's analyzer must live in that language's own ecosystem to reach its best tooling, so the
+tooling choices genuinely differ per language and the user owns them.
 
 ## Before you start: orient
 
 - Confirm the **target language** and locate the CLDK reference repos — you anchor the schema
   and construction on the **already-implemented** analyzers. They normally sit as siblings:
   `codeanalyzer-java/`, `codeanalyzer-python/` (analyzer templates), `codeanalyzer-ts/` (a
-  **cautionary** reference — see below), and `python-sdk/` (the SDK, which also contains the
-  **C** analyzer under `cldk/analysis/c/` — the procedural, non-class anchor). **If any of these
-  is not present locally, clone it into `/tmp` and anchor on that copy** (read-only — never push
-  to these):
+  **cautionary** reference — see below), and `python-sdk/` (which also contains the **C** analyzer
+  under `cldk/analysis/c/` — the procedural, non-class anchor — and is the model SDK Pydantic
+  schema the analyzer's output must validate against). **If any of these is not present locally,
+  clone it into `/tmp` and anchor on that copy** (read-only — never push to these):
   ```
   for r in codeanalyzer-java codeanalyzer-python codeanalyzer-ts python-sdk; do
     [ -d "/tmp/$r" ] || git clone --depth 1 https://github.com/codellm-devkit/$r.git "/tmp/$r"
@@ -76,8 +76,13 @@ them.
     actually do it.
   - `references/backend-recipe.md` — the 9-step methodology for building the analyzer.
   - `references/tooling-menu.md` — the per-language decision you'll walk the user through.
-  - `references/cli-contract.md` — the CLI flags the SDK facade depends on.
-  - `references/python-sdk-wiring.md` — the exact SDK files to create/edit.
+  - `references/cli-contract.md` — the CLI flags the analyzer must expose (the contract the
+    frontend SDKs depend on; owned here).
+  - `references/packaging-and-release.md` — **the distribution layer**: cross-compile the binary,
+    ship it as a thin `codeanalyzer-<lang>` PyPI package (+ raw binaries as GitHub Release assets +
+    a `brew install codeanalyzer-<lang>` formula pushed to the shared `codellm-devkit/homebrew-tap`),
+    and cut tag-triggered releases. Standing up `packaging/python/` + `packaging/homebrew/` +
+    `release.yml` is a first-class deliverable.
 
 ## Workflow
 
@@ -106,29 +111,38 @@ Also ask the **analysis depth** they want (`AskUserQuestion`):
   flipping the *Level 2: framework-based analysis* step from stubbed to implemented.
 
 Default to **rapid (level 1)** — level 1 is always built (it's the floor; level 2 builds on it),
-and deep is opt-in. Record the agreed choices — including the depth — under an
-**"Architecture & Tooling"** heading in the analyzer's own `codeanalyzer-<lang>/README.md`. This
+and deep is opt-in. Record the agreed choices — including the depth **and the packaging build
+strategy** (single-host cross-compile vs native-runner matrix; `packaging-and-release.md`) — under
+an **"Architecture & Tooling"** heading in the analyzer's own `codeanalyzer-<lang>/README.md`. This
 is deliberately a public, top-level doc: it documents for human readers *which backend tooling
-was chosen and why*, and it doubles as the guide any later session (you included) reads to recover
-the locked decisions without re-litigating them. Capture each load-bearing slot (runtime,
-structural parser, resolver, optional enrichment, build/dep materialization, packaging, depth,
-extra node kinds) and a one-line rationale per non-default choice. Keep the *Schema Design*
-`SCHEMA_DECISIONS.md` under the analyzer's `.claude/` folder (create it if needed); only these
-tooling decisions are promoted into the README.
+was chosen and why*, and it doubles as the guide any later session (you included, or the
+**cldk-sdk-frontend** skill) reads to recover the locked decisions without re-litigating them.
+Capture each load-bearing slot (runtime, structural parser, resolver, optional enrichment,
+build/dep materialization, packaging, depth, extra node kinds) and a one-line rationale per
+non-default choice. Keep the *Schema Design* `SCHEMA_DECISIONS.md` under the analyzer's `.claude/`
+folder (create it if needed); only these tooling decisions are promoted into the README.
 
 **Then check the toolchain is installed, before building anything.** The chosen tooling has hard
 prerequisites (Node + the analyzer's deps for ts-morph; the Go toolchain for `go/types`; the
 Rust toolchain + rust-analyzer; clang/libclang for C++; plus any framework backend like CodeQL/
-Joern if *deep*). Probe for them (e.g. `node --version`, `go version`, `rustc --version`,
-`clang --version`). **If anything required is missing, stop and instruct the user to install it**
+Joern if *deep*) **and the packaging/release toolchain that cross-compiles and publishes the
+`codeanalyzer-<lang>` package** (e.g. Bun for `bun build --compile --target=...`, GraalVM
+`native-image` for JVM, the cross-compile target for Go/Rust; plus Python `build`/`wheel`/`twine`
++ `auditwheel` for the platform wheels — see `references/packaging-and-release.md`). Probe for
+them (e.g. `node --version`, `go version`, `rustc --version`, `clang --version`, `bun --version`).
+**If anything required is missing, stop and instruct the user to install it**
 — give the exact install commands for their platform and what each is for — and **wait** until
 they confirm it's available. Do **not** proceed to scaffold-and-leave-unverified: an analyzer you
 can't run is an analyzer you can't validate against the schema, which is the whole success
 criterion. Only continue once the toolchain is present.
 
 ### Schema Design (interactive, node by node)
-Design the schema — analyzer-side types **and** the SDK `cldk/models/<lang>/` Pydantic models —
-by running the loop in `references/schema-design-loop.md` per node (spine first: `Module` →
+Design the canonical schema once — it is the **contract** the analyzer's `analysis.json` emits, and
+the contract the **cldk-sdk-frontend** skill later encodes as SDK models. Here you produce **two
+things in lockstep: the analyzer-side types AND the contract** (`canonical-schema.md` /
+`schema-reference.md`); the per-SDK `cldk/models/<lang>/` Pydantic models (and TS types) are built
+later by the frontend skill against this same approved contract. Run the loop in
+`references/schema-design-loop.md` per node (spine first: `Module` →
 `Class` → `Callable` → `Callsite` → `CallEdge`, then language-native kinds):
 
 1. **Anchor** — read the node in **Java** (`cldk/models/java/models.py`) and **Python**
@@ -140,11 +154,13 @@ by running the loop in `references/schema-design-loop.md` per node (spine first:
    Python did Y; for `<lang>`, concept Z, how do you want to model it?"* with explained options
    and a recommended default. (E.g. *Java annotations are flat strings, Python uses structured
    `PyDecorator`; for TS decorators that carry args, option 1: structured `TSDecorator`
-   (recommended) …*.) Record each answer.
-4. **Define & co-evolve** — encode the decisions into the analyzer type and the `<L>` model
-   together; snake_case, optional-with-defaults, spine untouched, identity-only edges.
+   (recommended) …*.) Record each answer in `.claude/SCHEMA_DECISIONS.md`.
+4. **Define** — encode the decisions into the analyzer-side type and update the contract;
+   snake_case, optional-with-defaults, spine untouched, identity-only edges. (These same decisions
+   drive the SDK models the frontend skill builds — `SCHEMA_DECISIONS.md` is its input.)
 
-No files are walked yet. Output: a complete, user-approved schema and the `<L>` models.
+No files are walked yet. Output: a complete, user-approved schema contract + the analyzer types +
+`SCHEMA_DECISIONS.md`.
 
 ### Scaffold the modular skeleton (seams first, before filling phases)
 Before writing any analysis logic, lay out the analyzer as a **modular package that mirrors
@@ -186,8 +202,9 @@ records call sites but doesn't resolve them into edges yet — the cheap resolut
 next stage (still level 1).
 
 **Symbol-table gate (verify):** run on a tiny fixture; output **validates** against the SDK
-`<Lang>Application` model, `symbol_table` is non-empty and path-keyed, a known file's `Module`
-looks right, and re-running reuses cache. Don't proceed until this passes.
+`<Lang>Application` model (the `python-sdk` Pydantic model is the comprehensive validation target),
+`symbol_table` is non-empty and path-keyed, a known file's `Module` looks right, and re-running
+reuses cache. Don't proceed until this passes.
 
 ### Call Graph Construction (resolver-based, cheap — completes level 1)
 This is **cheap and part of level 1**, not a heavy pass: the same Tier-1 resolver that typed the
@@ -211,14 +228,29 @@ precision (WALA/CodeQL/Joern/SVF) belongs to that level-2 step, not here.
 **Verify:** every edge endpoint matches a real signature (no dangling nodes); output still
 validates. (`backend-recipe.md` step 6.)
 
-### CLI, caching/incremental, packaging
+### CLI, caching/incremental, packaging & release
 Add the CLI family surface (`cli-contract.md`) with `analysis.json` as the only facade-visible
 output; caching by hash/mtime/size with vendored/test trees skipped and `--eager` forcing a
-rebuild. **For packaging, be opinionated: compile to a self-contained binary** so SDK users need
-no language runtime (Go/Rust/C++ native; TS via `bun build --compile`; JVM via GraalVM
-`native-image`, not a fat JAR) — the *only* exception is a Python analyzer, shipped as a pip
-package and invoked in-process. Version it and pin in the SDK. (`backend-recipe.md` steps 3, 8, 9;
-rationale in `tooling-menu.md` § "Packaging".)
+rebuild. **For packaging, be opinionated and follow `references/packaging-and-release.md`:
+build a self-contained binary for every platform, then ship it as a thin
+`codeanalyzer-<lang>` PyPI package** — one platform-tagged wheel per OS/arch, carrying the binary
+and exposing `bin_path()` — **plus raw binaries as GitHub Release assets, plus a Homebrew formula
+`Formula/codeanalyzer-<lang>.rb` pushed to the shared `codellm-devkit/homebrew-tap`** (so end users
+get `brew install codeanalyzer-<lang>`), all cut by a **tag-triggered `release.yml`**. The brew
+formula reuses the same Release-asset binaries (compiled case) or the same PyPI package (Python
+case) — never a rebuild. The frontend SDKs *depend on* that published package; they never
+bundle or build the binary. Build it by **single-host cross-compile where the toolchain allows** (TS
+via `bun build --compile --target=<plat>`; Go via `GOOS`/`GOARCH`; Rust via target triples) **or a
+native-runner build matrix where it doesn't** (JVM via GraalVM `native-image`, which can't
+cross-compile; C++/clang with per-target sysroots). A Python analyzer is the same PyPI package but
+its wheel carries code, imported in-process. **Release automation is standard practice, not optional:** stand up
+`packaging/python/` (the `build_wheels.sh` + `pyproject.toml` + `bin_path()` package) and
+`.github/workflows/release.yml`, tag releases `vX.Y.Z` with real notes modeled on
+`codeanalyzer-python`'s GitHub Releases (Keep-a-Changelog *Added/Changed/Fixed* + auto-generated
+*Detailed Changes*), publish to PyPI under `codeanalyzer-<lang>` (prefer OIDC Trusted Publishing),
+and **record the published name + version** so the frontend skill can pin it. (`backend-recipe.md`
+steps 3, 8, 9; full spec in `references/packaging-and-release.md`; rationale in `tooling-menu.md`
+§ "Packaging".)
 
 ### (Optional) Level 2: framework-based analysis
 Gated on the depth choice from *Orient & choose the backend tooling*. The heavy tier — a dedicated analysis engine
@@ -229,51 +261,96 @@ into the resolver graph by `(source, target)` with provenance union. (For a lang
 graph is *only* available this way — e.g. Java/WALA — this stage is where that call graph lives,
 regardless of the depth choice.)
 
-### Wire the Python SDK facade (on a branch)
-The `<L>` models already exist from *Schema Design*. On a `python-sdk` branch (`add-<lang>-support`),
-add the `cldk/analysis/<lang>/` facade (mirror the method surface of `JavaAnalysis`/
-`PythonAnalysis`), the `cldk/core.py` dispatch branch, the `pyproject.toml` version pin, and
-mocked tests. Copy the **Java** SDK pattern for a subprocess binary or the **Python** pattern
-for an in-process pip backend — match your packaging choice from the build plan.
-(`references/python-sdk-wiring.md`.) **Verify:** `CLDK(language="<lang>").analysis(project_path=
-<fixture>)` yields a non-empty symbol table and a dangling-free call graph; SDK tests pass with
-the backend mocked.
-
-### Write the analyzer README (last step)
+### Write the analyzer README (last build step)
 The analyzer's `codeanalyzer-<lang>/README.md` already holds the **Architecture & Tooling**
 decisions recorded back in *Orient & choose the backend tooling*. As the **final build step**,
 grow that file into a complete, user-facing README modeled on the reference analyzers'
 **`main`-branch** READMEs — `codeanalyzer-python/README.md` (the model to replicate) and
 `codeanalyzer-java/README.md`. Don't invent a layout; mirror theirs, in this order:
-- **Title + one-line what-it-is** — name the language and the chosen backend tooling (e.g.
-  "Static analysis for `<lang>` using `<parser>` + `<resolver>`"), echoing the reference openers.
+- **Logo + title + one-line what-it-is** — open with the shared CLDK logo, reusing the Python
+  repo's hosted URL (the analyzers share branding) rather than committing a per-language copy:
+  ```md
+  ![logo](https://github.com/codellm-devkit/codeanalyzer-python/blob/main/docs/assets/logo.png?raw=true)
+  ```
+  Then name the language and the chosen backend tooling (e.g. "Static analysis for `<lang>`
+  using `<parser>` + `<resolver>`"), echoing the reference openers.
 - **Prerequisites / installation** — the toolchain confirmed installed up front (runtime,
   parser, resolver, plus any framework backend if *deep*), with exact per-platform install
   commands as Python does for `venv`/build tools.
-- **Building** — how to produce the self-contained binary chosen in *CLI, caching/incremental,
-  packaging* (or the pip install, for a Python analyzer).
+- **Building, packaging & releasing** — how to build the self-contained binary and ship it
+  as the `codeanalyzer-<lang>` PyPI package + GitHub Release assets, and how releases are cut
+  (`packaging/python/` + `packaging/homebrew/` + tag-triggered `release.yml`), per *CLI,
+  caching/incremental, packaging & release* and `references/packaging-and-release.md`. For an SDK
+  user it's just `pip install codeanalyzer-<lang>`; for an end user, `brew tap codellm-devkit/tap &&
+  brew install codeanalyzer-<lang>`.
 - **Usage + CLI options** — paste the real `--help` output (from `cli-contract.md`), then a few
   worked **examples** like the Python README (basic symbol table, `--output`, level-2/framework
   flag).
 - **Analysis levels** — what level 1 (symbol table + resolver call graph) emits today and what
   level 2 (framework backend) adds — flagged stubbed-vs-implemented per the depth choice.
 - **Output schema** — point at the canonical `analysis.json` / `<Lang>Application` contract.
-- **Python SDK (CLDK) integration** — the `CLDK(language="<lang>")` entry from *Wire the Python
-  SDK facade*.
+- **SDK integration** — note that the CLDK SDKs bind this analyzer (Python:
+  `CLDK(language="<lang>").analysis(...)`; others later), wired by the **cldk-sdk-frontend** skill.
 - Keep the **Architecture & Tooling** section (the locked decisions) intact as its own heading.
 
 Write only what actually runs — don't document level-2 as working if it's a stubbed extension
 point. The README is the human-readable counterpart to the validated `analysis.json`: like every
 other stage, it describes the analyzer as it really is.
 
-### Summarize
-Report: the build plan, the schema decisions the user made, what runs today (the cheap level-1
-analysis — symbol table + resolver call graph — on the fixture), what's stubbed (the level-2
-framework backend), the SDK branch name, the analyzer `README.md` written as the last step, and the diff summary.
-Confirm the **modularity** checks
-from `references/analyzer-architecture.md` actually hold (delegating `core`, node-kind-split
-builder, isolated framework subpackage, present-and-wired `analysis/` + `frameworks/` layer) —
-report it as a checklist, not an aspiration.
+### Write the agent guide (CLAUDE.md + AGENTS.md/GEMINI.md symlinks) — a default artifact
+Every analyzer repo ships an **agent onboarding guide as a standing deliverable**, not an
+afterthought: a root `CLAUDE.md`, with `AGENTS.md` and `GEMINI.md` as **symlinks pointing at it**,
+so Claude Code, the generic-agent convention, and Gemini all read one source of truth. Always
+produce these — even for a minimal analyzer.
+
+`CLAUDE.md` is the *contributor/maintainer* counterpart to the user-facing README — it tells a
+coding agent how this repo is built, not how to use the CLI. Keep it concise and **specific to the
+analyzer as actually built** (no boilerplate); cover:
+- **What this repo is** — `codeanalyzer-<lang>`, the language, the chosen backend tooling (one line,
+  pointing at the README's *Architecture & Tooling* section for the locked decisions).
+- **The modular architecture and its seams** — the package skeleton from
+  `references/analyzer-architecture.md` (delegating `core`, `syntactic_analysis/`,
+  `semantic_analysis/` with the framework backend isolated, the `analysis/` pass registry +
+  `frameworks/` finder layer). State the **modularity rules as invariants** a change must preserve
+  (no inlined analysis in `core`, no hardcoded `entrypoints: {}`, builder split by node kind).
+- **How to build / test / run** — the real commands (e.g. `bun install`, `bun run build`,
+  `bun run typecheck`, `bun test`), and the fixture used to validate `analysis.json`.
+- **The schema contract** — that output must validate against the SDK `<Lang>Application` model;
+  point at the canonical `analysis.json` contract and `.claude/SCHEMA_DECISIONS.md`.
+- **Packaging & release + version lockstep** — the three channels (thin `codeanalyzer-<lang>` PyPI
+  wheel, raw GitHub Release assets, the `codellm-devkit/homebrew-tap` formula), the tag-triggered
+  `release.yml`, and the **one rule that bites**: keep the version identical across the manifest,
+  `packaging/python/`, the SDK pins, and the brew formula (`references/packaging-and-release.md`).
+- **Repo rules** — carry over any unbreakable conventions the repo already states (e.g.
+  `codeanalyzer-ts`'s "never add AI-authorship trailers / `🤖` signoffs to PRs"); preserve an
+  existing `CLAUDE.md`'s rules rather than dropping them.
+
+Create the symlinks as **relative** links at the repo root so they survive clone/checkout:
+```bash
+ln -sf CLAUDE.md AGENTS.md
+ln -sf CLAUDE.md GEMINI.md
+```
+Commit all three (git stores the symlinks). If a `CLAUDE.md` already exists (as in
+`codeanalyzer-ts`, a one-line rule file), **fold its content into the new guide** before adding the
+symlinks — never silently discard it.
+
+### Summarize & hand off to the frontend skill
+Report: the build plan, the schema decisions the user made (`SCHEMA_DECISIONS.md`), what runs today
+(the cheap level-1 analysis — symbol table + resolver call graph — on the fixture), what's stubbed
+(the level-2 framework backend), the **distribution artifacts** (the `codeanalyzer-<lang>` PyPI
+package under `packaging/python/`, the `packaging/homebrew/` formula generator + the
+`codellm-devkit/homebrew-tap` push, the tag-triggered `release.yml`, and the **published package
+name + version**), the analyzer `README.md` and the **`CLAUDE.md` agent guide with its `AGENTS.md`
+/ `GEMINI.md` symlinks**, and the diff summary. Confirm
+the **modularity** checks from `references/analyzer-architecture.md` actually hold (delegating
+`core`, node-kind-split builder, isolated framework subpackage, present-and-wired `analysis/` +
+`frameworks/` layer) — report it as a checklist, not an aspiration.
+
+**Hand-off to cldk-sdk-frontend.** This skill ends at a working, released analyzer. To make the
+language usable from a CLDK SDK, run the **cldk-sdk-frontend** skill next; it consumes exactly what
+you produced here: a sample `analysis.json`, the approved schema contract + `SCHEMA_DECISIONS.md`,
+the CLI contract (`--help`), and the published `codeanalyzer-<lang>` package name + version to pin.
+State these explicitly in the summary so the frontend skill (or a later session) has its inputs.
 
 > **Never fake verification.** The toolchain is confirmed installed up front (*Orient & choose
 > the backend tooling*), so every stage's verify step should actually run. If a required tool is
@@ -298,16 +375,15 @@ report it as a checklist, not an aspiration.
 - **Expand the schema for the language — that's a feature, not a deviation.** Keep the
   invariant spine (root keys, Module→Class/Callable nesting, identity-only edges,
   `signatureOf()`), then add the target language's own node kinds and fields as first-class
-  data rather than forcing it into the Java/Python mold. Co-evolve the analyzer output and the
-  `cldk/models/<lang>/` models together so validation still passes (you own both sides). See
-  the expansion rubric in `schema-reference.md`.
+  data rather than forcing it into the Java/Python mold. The contract you design here is what the
+  frontend skill encodes as SDK models, so record every new kind/field in `SCHEMA_DECISIONS.md`.
+  See the expansion rubric in `schema-reference.md`.
 - **Don't fake the call graph.** Identity-only edges must reference signatures that actually
   exist in the symbol table, produced by the same `signatureOf()`. Dangling edges are worse
   than no edges.
-- **Edit `python-sdk` only on a branch**, and confirm the tree is clean before branching.
-- **Scope discipline.** This skill adds a *new language*. Enriching an *existing* analyzer
-  with a new contribution point is `codeanalyzer-extension-builder`. The TypeScript SDK is
-  out of scope here.
+- **Scope discipline.** This skill builds the *analyzer* and its distribution — nothing in a CLDK
+  SDK repo. Wiring the analyzer into the Python/TS/… SDKs is **cldk-sdk-frontend**. Enriching an
+  *existing* analyzer with a new contribution point is `codeanalyzer-extension-builder`.
 - **No invented tooling.** If a recommended parser/resolver doesn't exist for the language,
   say so and fall back per the menu's reasoning (compiler API → tree-sitter + external
   resolver → CodeQL/Joern), rather than inventing a package name.

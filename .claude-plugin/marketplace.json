@@ -1,0 +1,14 @@
+{
+  "name": "cldk-skillset",
+  "owner": {
+    "name": "Rahul Krishna",
+    "email": "i.m.ralk@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "cldk-skillset",
+      "source": ".",
+      "description": "Build a language's backend analyzer (codeanalyzer-<lang>) and wire it into the CLDK frontend SDKs."
+    }
+  ]
+}

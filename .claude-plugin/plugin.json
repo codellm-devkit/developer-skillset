@@ -1,0 +1,14 @@
+{
+  "name": "cldk-skillset",
+  "displayName": "CLDK Skillset",
+  "description": "Skills for extending and maintaining CodeLLM-DevKit (CLDK): build a language's backend analyzer (codeanalyzer-<lang>) and wire it into the CLDK frontend SDKs.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Rahul Krishna",
+    "email": "i.m.ralk@gmail.com"
+  },
+  "homepage": "https://codellm-devkit.info",
+  "repository": "https://github.com/codellm-devkit/cldk-skillset",
+  "license": "Apache-2.0",
+  "keywords": ["cldk", "codellm-devkit", "code-analysis", "static-analysis", "skills"]
+}
