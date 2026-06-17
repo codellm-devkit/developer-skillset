@@ -23,6 +23,23 @@ The only thing the facade depends on is that, after a successful run, **`<output
 exists and conforms to `canonical-schema.md`** (or, with no `-o`, the same JSON is on
 stdout). Everything else — cache files, CodeQL databases, build artifacts — is internal.
 
+## Flag validation requirements
+
+Flags that accept a fixed vocabulary must be validated — never silently ignored.
+
+**`--format`** — Only `json` is currently required to be implemented. If `msgpack` or any
+other value is passed and not implemented, return an explicit error:
+```
+error: msgpack output is not yet implemented; use --format json
+```
+Silently falling back to JSON is worse than an error: the caller asked for msgpack,
+received JSON, and may process the output incorrectly.
+
+The general rule: any flag whose value is unrecognized or unimplemented **must** return a
+non-zero exit with a clear message. The Python SDK wrapper passes the format flag through
+to the binary; if the binary silently accepts and ignores the flag, the SDK has no way to
+know the output format differs from what was requested.
+
 ## Level selection
 Two orthogonal axes, don't conflate them:
 - **`-a 1|2`** scopes the **cheap, resolver-based (level-1)** analysis: `-a 1` = symbol table

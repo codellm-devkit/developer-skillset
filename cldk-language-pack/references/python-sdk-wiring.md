@@ -94,12 +94,16 @@ Three edits, mirroring the existing Java/Python/C branches:
 - Add a tree-sitter grammar dep (`tree-sitter-<lang>==X`) only if you ship a parser.
 
 ### 5. Tests — `tests/analysis/<lang>/`
-- `test_<lang>_analysis.py` — mirror `tests/analysis/java/test_java_analysis.py` /
-  `tests/analysis/python/test_python_analysis.py`. **Mock the backend** (patch the wrapper's
-  run method to return a fixture `analysis.json`) so tests don't require the binary, then
-  assert `get_symbol_table()` is non-empty, the call graph builds, etc.
-- Add a fixture `analysis.json` under `tests/resources/<lang>/analysis_json/` and any sample
-  project fixture in `tests/conftest.py`, following the existing per-language fixtures.
+Two test files — mocked and E2E. Full criteria and patterns in `sdk-testing.md`.
+
+- `test_<lang>_analysis.py` — mocked tests. Patch the wrapper's `_run_and_parse()` (or
+  equivalent) to return a pre-built `<Lang>Application` from a fixture JSON. Tests never
+  invoke the binary. See `sdk-testing.md §3` for minimum coverage.
+- `test_<lang>_e2e.py` — E2E tests. Use `pytest.mark.skipif(shutil.which("codeanalyzer-<lang>")
+  is None, ...)` so they skip cleanly on CI without the binary. See `sdk-testing.md §4`.
+- Fixture `analysis.json` under `tests/resources/<lang>/analysis_json/` for mocked tests.
+- Real project fixture under `tests/resources/<lang>/application/` for E2E tests (can
+  be the same fixture used by the analyzer's own `go test`).
 
 ## The facade abstraction
 
@@ -154,6 +158,82 @@ omit them until the data exists.
 vs `*_module`), decoration (`get_methods_with_annotations` vs `get_methods_with_decorators`),
 comments (`get_comments_in_a_method` vs `get_all_docstrings`). Reproduce Tier A verbatim; name
 the leaf accessors for your language.
+
+## Common pitfalls
+
+### Null-safe Pydantic models (`_NullSafeBase`)
+
+Languages like Go serialize nil/empty slices as JSON `null`, not `[]`. Pydantic v2
+`List[T]` rejects `null` with a `ValidationError` ("Input should be a valid list"). Fix
+this with a shared base class that coerces null → empty collection **before** Pydantic
+validates:
+
+```python
+from typing import Any
+from pydantic import BaseModel, model_validator
+
+class _NullSafeBase(BaseModel):
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_null_collections(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        for field_name, field_info in cls.model_fields.items():
+            if data.get(field_name) is None and field_info.default_factory is not None:
+                try:
+                    sentinel = field_info.default_factory()
+                    if isinstance(sentinel, (list, dict)):
+                        data[field_name] = sentinel
+                except Exception:
+                    pass
+        return data
+```
+
+Have **all model classes** inherit from `_NullSafeBase` instead of `BaseModel` directly.
+This affects any language whose serializer writes null for empty collections: Go (nil
+slices), Rust (serde skips fields / emits null), C with cJSON, Swift/ObjC with nil
+NSArray. Add a mocked test that passes a `null` list field and confirms the model loads
+without error.
+
+### `_level_flag()` must emit integers, not enum names
+
+The CLI flag is `--analysis-level 1` or `--analysis-level 2` (integers). The Python
+`AnalysisLevel` enum has string values (`"symbol_table"`, `"call_graph"`). The backend
+wrapper must explicitly map:
+
+```python
+@staticmethod
+def _level_flag(analysis_level: str) -> str:
+    if analysis_level == AnalysisLevel.call_graph:
+        return "2"
+    return "1"
+```
+
+Sending `--analysis-level symbol_table` will either be rejected by the CLI or silently
+treated as level 0. This bug is invisible to mocked tests — it only surfaces in E2E tests
+(which is why `sdk-testing.md §4` mandates them).
+
+### Binary discovery: `shutil.which()` vs `importlib.resources`
+
+The Java wrapper uses `importlib.resources.files()` because the JAR is **bundled inside
+the Python package** under `cldk/analysis/java/codeanalyzer/bin/`. For all other languages
+(Go, Rust, TS), the binary is built separately and lives on PATH — do **not** bundle it.
+
+```python
+import shutil
+
+def _find_binary(name: str) -> str:
+    path = shutil.which(name)
+    if path is None:
+        raise FileNotFoundError(
+            f"{name} not found on PATH. "
+            f"Build it from the codeanalyzer-<lang> repo and install to e.g. ~/.local/bin/."
+        )
+    return path
+```
+
+Call this in the wrapper constructor. The error message should tell the user exactly how
+to fix it — don't just say "binary not found".
 
 ## Definition of done for this surface
 - `CLDK(language="<lang>").analysis(project_path=<fixture>)` returns a facade whose
