@@ -119,7 +119,7 @@ the `new`/`__init__` normalization).*
 | `target` | `str` | callee `Callable.signature` |
 | `type` | `Literal["CALL_DEP"]` | `"CALL_DEP"` |
 | `weight` | `int` | `1` (accumulate when merging backends) |
-| `provenance` | `List[str]` | `[]` — e.g. `["tsc"]`, `["jedi","codeql"]` |
+| `provenance` | `List[str]` | `[]` — e.g. `["tsc"]`, `["jedi","joern"]` |
 | `tags` | `Dict[str, str]` | `{}` — free-form, extension-namespaced |
 
 ## Supporting leaf models

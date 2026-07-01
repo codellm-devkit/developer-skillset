@@ -32,7 +32,7 @@ codeanalyzer/
   syntactic_analysis/    # symbol-table construction (the per-file builder)
   semantic_analysis/     # call-graph construction
     call_graph.py        #   the resolver-based graph + graph<->schema adaptation
-    codeql/              #   the heavy framework backend, ISOLATED in its own subpackage
+    <framework>/         #   the heavy framework backend (joern/wala/svf), ISOLATED in its own subpackage
   analysis/              # the PLUGGABLE pass layer (registry + AnalysisPass base)
   frameworks/            # entrypoint-finder base + concrete finders, built ON the pass layer
   utils/                 # logging, progress, fs helpers — no analysis logic
@@ -77,13 +77,13 @@ named place.
 > `syntactic_analysis/` (e.g. `class_builder`, `callable_builder`) sharing one resolver/context
 > object — do not let it stay a flat grab-bag of free functions.
 
-### 3. The heavy framework backend (CodeQL/Joern/WALA/SVF) is isolated in its own subpackage
-Python keeps CodeQL behind a clean boundary: `semantic_analysis/codeql/` has *four* files —
-`codeql_loader.py` (resolve the binary), `codeql_analysis.py` (build DB + drive), 
-`codeql_query_runner.py` (run queries + parse), `codeql_exceptions.py` (typed errors). `core.py`
-talks to a `CodeQL` class and never touches the binary, the database, or a query string.
+### 3. The heavy framework backend (Joern/WALA/SVF) is isolated in its own subpackage
+Python keeps its framework backend behind a clean boundary: `semantic_analysis/<framework>/` has *four* files —
+a loader (resolve the binary), an analysis driver (build the DB + drive it), 
+a query runner (run queries + parse), and typed errors. `core.py`
+talks to one facade class and never touches the binary, the database, or a query string.
 
-> **Anti-pattern (from `codeanalyzer-ts/src/semantic_analysis/codeql/codeql.ts`):** a single
+> **Anti-pattern (from `codeanalyzer-ts`'s original level-2 stub):** a single
 > 45-line stub. When level 2 is actually implemented it will accrete binary resolution, DB
 > management, query execution, and parsing into one file unless the seams are scaffolded now.
 >
@@ -126,7 +126,7 @@ enrichment can never go stale.
   before you fill in phases. The seams come first, not last.
 - *Symbol Table Construction* fills `syntactic_analysis/` per rule 2.
 - *Call Graph Construction* fills `semantic_analysis/call_graph` (rule 1's base graph).
-- *Level 2: framework-based analysis* fills `semantic_analysis/codeql/` (or joern/wala/svf) per
+- *Level 2: framework-based analysis* fills `semantic_analysis/<framework>/` (joern/wala/svf) per
   rule 3 — its subpackage and seams exist even when stubbed.
 - The `analysis/` + `frameworks/` pass layer (rule 4) is scaffolded with the skeleton and wired
   into `core` via `run_pipeline`, even if no concrete pass ships in the first run.
