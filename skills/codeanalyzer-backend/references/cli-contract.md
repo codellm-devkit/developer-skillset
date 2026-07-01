@@ -10,8 +10,10 @@ are the references.
 | `-i, --input <path>` | Project root to analyze | Required |
 | `-o, --output <dir>` | Directory to write `analysis.json` | **When omitted, print compact JSON to stdout.** The facade relies on this |
 | `-f, --format <json\|msgpack>` | Serialization format | Default `json` |
-| `-a, --analysis-level <1\|2>` | 1 = symbol table only; 2 = + **resolver-based** call graph (still cheap) | Java style. Python instead uses toggles; either is fine as long as the cheap symbol-table-only run is the default |
-| `--codeql / --joern` (or similar) | Add the **framework-based** (heavy) call graph | Separate toggle, **not** an `-a` level; off by default |
+| `-a, --analysis-level <1\|2\|3>` | 1 = symbol table only; 2 = + **resolver-based** call graph (still cheap); 3 = + **native dataflow graphs** (heavy; `dataflow-graphs.md`) | Java style. Python instead uses toggles; either is fine as long as the cheap symbol-table-only run is the default |
+| `--joern` (or similar) | Add the **framework-based** (heavy) call graph | Separate toggle, **not** an `-a` level; off by default |
+| `--graphs <cfg,dfg,pdg,sdg>` | Scope which level-3 graphs are emitted | Only meaningful with `-a 3` (default: all). Strict flag validation |
+| `--graph-field-depth <k>` | Access-path k-limit for level-3 dataflow | Default 3; mandatory for termination |
 | `-t, --target-files <paths>` | Restrict analysis to specific files | Incremental analysis |
 | `--skip-tests / --include-tests` | Skip test trees | Default skip |
 | `--eager / --lazy` | Force clean rebuild vs reuse cache | Default lazy |
@@ -35,7 +37,7 @@ Precedence for the neo4j flags: **explicit flag > env var > default**.
 ## The output contract
 The only thing the facade depends on is that, after a successful run, **`<output>/analysis.json`
 exists and conforms to `canonical-schema.md`** (or, with no `-o`, the same JSON is on
-stdout). Everything else — cache files, CodeQL databases, build artifacts — is internal.
+stdout). Everything else — cache files, framework databases, build artifacts — is internal.
 
 ## Flag validation requirements
 
@@ -60,8 +62,10 @@ Two orthogonal axes, don't conflate them:
   only; `-a 2` = + the resolver call graph. The resolver call graph is cheap (the resolver is
   already loaded), so `-a 2` is still the lightweight tier — keep `-a 1` (symbol table only) as
   the default.
-- **A separate flag** (`--codeql`/`--joern`/…) turns on the **heavy, framework-based (level-2)**
+- **A separate flag** (`--joern`/…) turns on the **heavy, framework-based (level-2)**
   backend. Off by default so the cheap path stays cheap.
+- **`-a 3`** adds the **native dataflow graphs** (CFG/PDG/SDG — `dataflow-graphs.md`), scoped by
+  `--graphs`. Implies `-a 2`. Heavy but in-process; still orthogonal to the framework toggle.
 
 The SDK passes its `AnalysisLevel` enum through to the `-a` flag; the framework backend is its
 own opt-in.
