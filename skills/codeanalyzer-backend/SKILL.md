@@ -357,42 +357,55 @@ Write only what actually runs — don't document level-2 as working if it's a st
 point. The README is the human-readable counterpart to the validated `analysis.json`: like every
 other stage, it describes the analyzer as it really is.
 
-### Write the agent guide (CLAUDE.md + AGENTS.md/GEMINI.md symlinks) — a default artifact
+### Write the agent guide (CLAUDE.md + AGENTS.md symlink) — a default artifact
 Every analyzer repo ships an **agent onboarding guide as a standing deliverable**, not an
-afterthought: a root `CLAUDE.md`, with `AGENTS.md` and `GEMINI.md` as **symlinks pointing at it**,
-so Claude Code, the generic-agent convention, and Gemini all read one source of truth. Always
-produce these — even for a minimal analyzer.
+afterthought: a root `CLAUDE.md`, with `AGENTS.md` as a **symlink pointing at it**, so Claude Code
+and the generic-agent convention read one source of truth. Always produce these — even for a
+minimal analyzer.
 
-`CLAUDE.md` is the *contributor/maintainer* counterpart to the user-facing README — it tells a
-coding agent how this repo is built, not how to use the CLI. Keep it concise and **specific to the
-analyzer as actually built** (no boilerplate); cover:
-- **What this repo is** — `codeanalyzer-<lang>`, the language, the chosen backend tooling (one line,
-  pointing at the README's *Architecture & Tooling* section for the locked decisions).
-- **The modular architecture and its seams** — the package skeleton from
-  `references/analyzer-architecture.md` (delegating `core`, `syntactic_analysis/`,
-  `semantic_analysis/` with the framework backend isolated, the `analysis/` pass registry +
-  `frameworks/` finder layer). State the **modularity rules as invariants** a change must preserve
-  (no inlined analysis in `core`, no hardcoded `entrypoints: {}`, builder split by node kind).
-- **How to build / test / run** — the real commands (e.g. `bun install`, `bun run build`,
-  `bun run typecheck`, `bun test`), and the fixture used to validate `analysis.json`.
-- **The schema contract** — that output must validate against the SDK `<Lang>Application` model;
-  point at the canonical `analysis.json` contract and `.claude/SCHEMA_DECISIONS.md`.
-- **Packaging & release + version lockstep** — the three channels (thin `codeanalyzer-<lang>` PyPI
-  wheel, raw GitHub Release assets, the `codellm-devkit/homebrew-tap` formula), the tag-triggered
-  `release.yml`, and the **one rule that bites**: keep the version identical across the manifest,
+**The template is `codeanalyzer-typescript/CLAUDE.md` — mirror it.** It is the canonical form; do
+not invent a layout. Read it and reproduce its structure, regenerating the analyzer-specific
+sections for `<lang>` and carrying the standard sections over near-verbatim (adjusted for the new
+repo). `CLAUDE.md` is the *contributor/maintainer* counterpart to the user-facing README — it tells
+a coding agent how this repo is built, not how to use the CLI. Keep it concise and **specific to
+the analyzer as actually built** (no boilerplate), in the template's order:
+
+- **Title + one-liner** — `Agent guidance for codellm-devkit/codeanalyzer-<lang> (<short-name>)`.
+- **What this project is** — the language, the chosen backend tooling, that it emits the canonical
+  `analysis.json` (symbol table + resolver call graph) **and** (if built) the optional Neo4j
+  projection, and that it **mirrors the Java/Python/TS sibling analyzers so output-shape parity is
+  a first-class concern**. One line, pointing at the README's *Architecture & Tooling* section for
+  the locked decisions.
+- **Architecture — follow the pipeline** — name the single `analyze()`/`core` orchestrator and
+  list its ordered stages (materialize → symbol table → call graph → cache → output/neo4j), the way
+  the template walks `src/core.ts`. State the **modularity rules as invariants** a change must
+  preserve (no inlined analysis in `core`, no hardcoded `entrypoints: {}`, builder split by node
+  kind — from `references/analyzer-architecture.md`), and that `<Lang>Application` in the schema is
+  the output contract.
+- **Directory map** — a path → responsibility table for the actual package layout.
+- **Commands** — the real build/test/run/typecheck/schema-gen commands (e.g. `bun run build`,
+  `bun test`, `bun run gen:schema`; or the Go/Rust/Python equivalents), and the fixture used to
+  validate `analysis.json`.
+- **Schema + packaging contract** — output must validate against the SDK `<Lang>Application` model
+  (point at `.claude/SCHEMA_DECISIONS.md`); the Neo4j schema is versioned and enforced by a
+  conformance test — treat it as a contract; and the version-lockstep rule across the manifest,
   `packaging/python/`, the SDK pins, and the brew formula (`references/packaging-and-release.md`).
-- **Repo rules** — carry over any unbreakable conventions the repo already states (e.g.
-  `codeanalyzer-ts`'s "never add AI-authorship trailers / `🤖` signoffs to PRs"); preserve an
-  existing `CLAUDE.md`'s rules rather than dropping them.
+- **The standard working-style + rules + auxiliary sections** — carry the template's *"I implement
+  features myself — you assist"*, the numbered **Rules** (think before coding; simplicity;
+  issue → branch → PR; guard the contract), the teaching-loop / spaced-repetition section (which
+  defers to `~/.claude/CLAUDE.md`), and the *Auxiliary support tasks* (e.g. tidy up the release
+  announcement) over near-verbatim, adjusting repo name, short-name, and the upgrade one-liners
+  (`pip install -U codeanalyzer-<lang>`, the brew tap) for this analyzer.
+- **Repo rules** — carry over any unbreakable conventions the repo already states (never add
+  AI-authorship trailers / `🤖` signoffs to PRs); preserve an existing `CLAUDE.md`'s rules rather
+  than dropping them.
 
-Create the symlinks as **relative** links at the repo root so they survive clone/checkout:
+Create the symlink as a **relative** link at the repo root so it survives clone/checkout:
 ```bash
 ln -sf CLAUDE.md AGENTS.md
-ln -sf CLAUDE.md GEMINI.md
 ```
-Commit all three (git stores the symlinks). If a `CLAUDE.md` already exists (as in
-`codeanalyzer-ts`, a one-line rule file), **fold its content into the new guide** before adding the
-symlinks — never silently discard it.
+Commit both (git stores the symlink). If a `CLAUDE.md` already exists (as a one-line rule file),
+**fold its content into the new guide** before adding the symlink — never silently discard it.
 
 ### Summarize & hand off to the frontend skill
 Report: the build plan, the schema decisions the user made (`SCHEMA_DECISIONS.md`), what runs today
@@ -401,7 +414,7 @@ Report: the build plan, the schema decisions the user made (`SCHEMA_DECISIONS.md
 package under `packaging/python/`, the `packaging/homebrew/` formula generator + the
 `codellm-devkit/homebrew-tap` push, the tag-triggered `release.yml`, and the **published package
 name + version**), the analyzer `README.md` and the **`CLAUDE.md` agent guide with its `AGENTS.md`
-/ `GEMINI.md` symlinks**, and the diff summary. Confirm
+symlink** (mirroring `codeanalyzer-typescript/CLAUDE.md`), and the diff summary. Confirm
 the **modularity** checks from `references/analyzer-architecture.md` actually hold (delegating
 `core`, node-kind-split builder, isolated framework subpackage, present-and-wired `analysis/` +
 `frameworks/` layer) — report it as a checklist, not an aspiration.

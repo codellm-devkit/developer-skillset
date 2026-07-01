@@ -153,12 +153,28 @@ mocked.
 + the `<L>` models that validate against `analysis.json`, on a branch, with the analyzer-version pin
 kept in lockstep.)*
 
+### Update the SDK agent guide (CLAUDE.md) — update, don't create
+Each SDK repo **already ships a `CLAUDE.md`** (e.g. `python-sdk/CLAUDE.md`) — the maintainer's
+standing agent guide with personal working-style rules and auxiliary tasks. **Do not create a new
+one and do not overwrite it.** On the `add-<lang>-support` branch, edit the existing file in place
+to reflect the newly-wired language, surgically:
+- Add `<lang>` wherever the guide enumerates **supported languages / backends / entry points** (the
+  `CLDK.<lang>()` factory, the local + Neo4j backends) or keeps a **directory map / prior-art
+  pointers** — extend those lists; don't restructure the doc.
+- If the guide has **no** language-specific section to extend (as `python-sdk/CLAUDE.md` currently
+  doesn't), add a single concise line noting `<lang>` is now wired (facade + backend ABC + models,
+  pinned to `codeanalyzer-<lang>==X`) rather than a wholesale rewrite.
+- **Preserve every existing section verbatim** — the *"I implement features myself"* stance, the
+  numbered Rules, the teaching loop, and the *Auxiliary support tasks*. Never drop or reword them.
+- Leave the repo's symlink convention as-is; don't add symlinks the repo doesn't already use.
+
 ### Summarize
 Report: the facade decisions the user made (`FACADE_DECISIONS.md`), which SDK(s) were wired and on
 what branch (`add-<lang>-support` per repo), the analyzer-version pin used (kept in lockstep with
 the backend's published `codeanalyzer-<lang>` release across every SDK touched), the verify results
 (`get_symbol_table()` non-empty, `get_call_graph()` dangling-free, tests green with the backend
-mocked), and the diff summary per repo.
+mocked), the **in-place `CLAUDE.md` update** (the language added to the existing guide, personal
+rules preserved), and the diff summary per repo.
 
 > **Never fake verification.** Each SDK's verify step must actually run against the sample
 > `analysis.json` with the backend mocked. If the models don't validate the sample, fix the models
