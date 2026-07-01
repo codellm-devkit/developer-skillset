@@ -78,6 +78,7 @@ them.
   - `references/tooling-menu.md` — the per-language decision you'll walk the user through.
   - `references/cli-contract.md` — the CLI flags the SDK facade depends on.
   - `references/python-sdk-wiring.md` — the exact SDK files to create/edit.
+  - `references/sdk-testing.md` — **all verification criteria, fixture design rules, and definitions of done** for both surfaces. Read before writing any tests.
 
 ## Workflow
 
@@ -185,9 +186,28 @@ Support whole-project, `-t` target-files, and (optional) single-source modes. Th
 records call sites but doesn't resolve them into edges yet — the cheap resolution is the very
 next stage (still level 1).
 
-**Symbol-table gate (verify):** run on a tiny fixture; output **validates** against the SDK
-`<Lang>Application` model, `symbol_table` is non-empty and path-keyed, a known file's `Module`
-looks right, and re-running reuses cache. Don't proceed until this passes.
+**Path predicate pitfall — apply filters to the relative path, never the absolute path.**
+Every file-skip predicate (`IsVendored`, `IsTestFile`, and any custom equivalent) must be
+evaluated against the path *relative to the project root* — not the absolute path. Absolute
+paths carry segments from the analyzer's own directory layout (`testdata`, `vendor`, `.git`,
+etc.) that falsely trigger the filter and silently empty the symbol table. Resolve the project
+root to an absolute path at the top of the analysis entry point, then derive all relative keys
+as `rel(projectRoot, absFilePath)`. Using the process's working directory as the base
+(e.g. `rel(".", absPath)`) is a separate trap: it produces the right answer only when the
+process happens to run from the project root, which is never the case in tests.
+
+**Cross-file type/method attachment — check whether your language requires a two-pass build.**
+In some languages a type and its method bodies can be spread across multiple files of the same
+unit (Go packages, C# partial classes and extension methods, Kotlin extension functions, Ruby
+open classes). A single-pass, file-by-file builder that resolves receiver types only within
+the current file silently drops every method defined in a sibling file. Identify whether the
+target language has this property before writing the builder. If it does, use a two-pass
+approach: pass 1 collects all type declarations from every file and builds a
+`(unit, typeName) → ownerFile` index; pass 2 attaches methods using that index. Retrofitting
+this after the fact is costly — the fix lives in the core iteration loop.
+
+**Symbol-table gate (verify):** Run the analyzer on the fixture and confirm the criteria
+in `references/sdk-testing.md §2` (symbol-table gate). Don't proceed until this passes.
 
 ### Call Graph Construction (resolver-based, cheap — completes level 1)
 This is **cheap and part of level 1**, not a heavy pass: the same Tier-1 resolver that typed the
@@ -208,13 +228,31 @@ pass (`makeRTABuilder` → **RTA**), which for a new resolver-capable language b
 (declared-type only ≈ CHA, + instantiated subtypes ≈ RTA-style); heavier framework-based
 precision (WALA/CodeQL/Joern/SVF) belongs to that level-2 step, not here.
 
-**Verify:** every edge endpoint matches a real signature (no dangling nodes); output still
-validates. (`backend-recipe.md` step 6.)
+**Verify:** confirm the criteria in `references/sdk-testing.md §2` (call-graph gate). (`backend-recipe.md` step 6.)
 
 ### CLI, caching/incremental, packaging
 Add the CLI family surface (`cli-contract.md`) with `analysis.json` as the only facade-visible
-output; caching by hash/mtime/size with vendored/test trees skipped and `--eager` forcing a
-rebuild. **For packaging, be opinionated: compile to a self-contained binary** so SDK users need
+output. **Validate all flag values** — unrecognized or unimplemented values (e.g. `--format
+msgpack` before msgpack is implemented) must return a non-zero exit with a clear message, never
+silently fall back. See `cli-contract.md §Flag validation requirements`.
+
+**Caching has three independent layers — implement and test each explicitly:**
+
+1. **Materialization cache** — memoizes the dependency-fetch step (`go mod download`, `npm ci`,
+   venv build) by hashing the manifest (`go.sum`, `package-lock.json`, `requirements.txt`).
+   Stored in `cache_dir`. Bypassed by `--eager`.
+2. **Per-run output cache** (`analysis_cache.json`) — written to `cache_dir` after every
+   successful `Analyze()` call. Always rewritten; gives the SDK something to read without
+   re-invoking the binary. `--eager` rewrites it; non-eager runs still write it (it's not
+   a skip guard at the binary level).
+3. **SDK-level skip** — the Python facade's `_check_existing_analysis()` reads the *output
+   dir*'s `analysis.json`, validates it, and **skips invoking the binary entirely** if valid.
+   This is where the real "don't re-run the binary" logic lives. The binary itself always
+   runs fresh analysis when invoked.
+
+The behavioral tests for caching are in `references/sdk-testing.md §2` (Caching tests).
+
+**For packaging, be opinionated: compile to a self-contained binary** so SDK users need
 no language runtime (Go/Rust/C++ native; TS via `bun build --compile`; JVM via GraalVM
 `native-image`, not a fat JAR) — the *only* exception is a Python analyzer, shipped as a pip
 package and invoked in-process. Version it and pin in the SDK. (`backend-recipe.md` steps 3, 8, 9;
@@ -249,7 +287,10 @@ grow that file into a complete, user-facing README modeled on the reference anal
   "Static analysis for `<lang>` using `<parser>` + `<resolver>`"), echoing the reference openers.
 - **Prerequisites / installation** — the toolchain confirmed installed up front (runtime,
   parser, resolver, plus any framework backend if *deep*), with exact per-platform install
-  commands as Python does for `venv`/build tools.
+  commands as Python does for `venv`/build tools. Read the minimum version from the **build
+  manifest** (`go.mod`'s `go` directive, `Cargo.toml`'s `rust` field, `pyproject.toml`'s
+  `requires-python`, etc.) — not from what happens to be installed. Record both the minimum
+  and the version the analyzer was actually tested on.
 - **Building** — how to produce the self-contained binary chosen in *CLI, caching/incremental,
   packaging* (or the pip install, for a Python analyzer).
 - **Usage + CLI options** — paste the real `--help` output (from `cli-contract.md`), then a few
@@ -275,11 +316,10 @@ from `references/analyzer-architecture.md` actually hold (delegating `core`, nod
 builder, isolated framework subpackage, present-and-wired `analysis/` + `frameworks/` layer) —
 report it as a checklist, not an aspiration.
 
-> **Never fake verification.** The toolchain is confirmed installed up front (*Orient & choose
-> the backend tooling*), so every stage's verify step should actually run. If a required tool is
-> ever found missing mid-build, **stop and instruct the user to install it** (exact commands +
-> what it's for) and wait — don't scaffold-and-leave-unverified, and don't claim a stage passed
-> without running it.
+> **Never fake verification.** Every stage's verify step must actually run. If a required tool
+> is found missing mid-build, stop and instruct the user to install it (exact commands + what
+> it's for) and wait. Full criteria, fixture design rules, and definitions of done:
+> `references/sdk-testing.md`.
 
 ## Guardrails
 - **Modularity is a success criterion, not a nicety.** A monolithic analyzer that emits valid
@@ -311,3 +351,14 @@ report it as a checklist, not an aspiration.
 - **No invented tooling.** If a recommended parser/resolver doesn't exist for the language,
   say so and fall back per the menu's reasoning (compiler API → tree-sitter + external
   resolver → CodeQL/Joern), rather than inventing a package name.
+- **Path predicates must operate on relative paths.** Any skip predicate (`IsVendored`,
+  `IsTestFile`, or a custom equivalent) applied to an absolute file path will silently match
+  directory segments from the analyzer's own source tree and discard all files under them.
+  Apply every such predicate to the path relative to the project root — never to the absolute
+  path. This is an invisible failure: the analyzer compiles cleanly, all tests pass on the
+  project, and the symbol table is empty.
+- **Every language-specific schema field needs a test that asserts its value.** Pydantic
+  validation confirms the JSON is structurally well-formed; it does not confirm that
+  language-specific fields are correctly populated. For every field added beyond the
+  Java/Python spine, write at least one test asserting a known concrete value. A field with
+  no value test is guaranteed to break silently when the builder logic changes.
