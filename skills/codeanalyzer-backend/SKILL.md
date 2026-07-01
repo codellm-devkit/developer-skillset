@@ -404,8 +404,19 @@ Create the symlink as a **relative** link at the repo root so it survives clone/
 ```bash
 ln -sf CLAUDE.md AGENTS.md
 ```
-Commit both (git stores the symlink). If a `CLAUDE.md` already exists (as a one-line rule file),
-**fold its content into the new guide** before adding the symlink — never silently discard it.
+**Watch the global-gitignore trap:** many setups exclude `AGENTS.md` in a global
+`~/.gitignore_global`, so `git add AGENTS.md` silently no-ops and the symlink never gets
+committed. Un-ignore it in the repo's local `.gitignore` (a repo rule overrides the global one),
+then commit:
+```gitignore
+# Un-ignore the agent guide past a global gitignore that excludes AGENTS.md
+!CLAUDE.md
+!AGENTS.md
+```
+Verify with `git check-ignore AGENTS.md` (should print nothing) and confirm `git ls-files` shows
+both. If the negation isn't enough in your setup, `git add -f AGENTS.md`. Commit both files (git
+stores the symlink). If a `CLAUDE.md` already exists (as a one-line rule file), **fold its content
+into the new guide** before adding the symlink — never silently discard it.
 
 ### Summarize & hand off to the frontend skill
 Report: the build plan, the schema decisions the user made (`SCHEMA_DECISIONS.md`), what runs today

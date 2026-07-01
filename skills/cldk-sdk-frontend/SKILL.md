@@ -166,7 +166,12 @@ to reflect the newly-wired language, surgically:
   pinned to `codeanalyzer-<lang>==X`) rather than a wholesale rewrite.
 - **Preserve every existing section verbatim** — the *"I implement features myself"* stance, the
   numbered Rules, the teaching loop, and the *Auxiliary support tasks*. Never drop or reword them.
-- Leave the repo's symlink convention as-is; don't add symlinks the repo doesn't already use.
+- Match the repo's symlink convention. `python-sdk` ships `CLAUDE.md` with `AGENTS.md` and
+  `GEMINI.md` as relative symlinks, un-ignored via a local `.gitignore` negation (`!AGENTS.md`,
+  since the global `~/.gitignore_global` excludes `AGENTS.md`). If a repo has the guide but not
+  the symlinks/negation, adding them is fine; if it deliberately has neither, don't force them.
+  When symlinks are present, keep the `.gitignore` negation so the globally-ignored `AGENTS.md`
+  stays tracked (verify `git ls-files AGENTS.md`; `git add -f` as a fallback).
 
 ### Summarize
 Report: the facade decisions the user made (`FACADE_DECISIONS.md`), which SDK(s) were wired and on
