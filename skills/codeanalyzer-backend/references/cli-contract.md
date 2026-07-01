@@ -18,6 +18,20 @@ are the references.
 | `-c, --cache-dir <dir>` | Where caches/intermediate DBs live | |
 | `-v` | Verbosity (repeatable) | |
 
+**Neo4j projection flags** (optional second output surface — full spec in
+`neo4j-projection.md`). Present on all mature analyzers; add once level-1 JSON is solid:
+
+| Flag | Meaning | Notes |
+| --- | --- | --- |
+| `--emit <json\|neo4j\|schema>` | Output target | `json` (default) → `analysis.json`; `neo4j` → `graph.cypher` or live push; `schema` → static `schema.neo4j.json` (needs no `-i`) |
+| `--neo4j-uri <uri>` | Live Bolt push target | Omit → write `graph.cypher` file. Env `NEO4J_URI` |
+| `--neo4j-user <user>` | Username | Env `NEO4J_USERNAME`, default `neo4j` |
+| `--neo4j-password <pw>` | Password | Env `NEO4J_PASSWORD`, default `neo4j` |
+| `--neo4j-database <db>` | Database name | Env `NEO4J_DATABASE`, optional |
+| `--app-name <name>` | `:Application` anchor name | Default: input dir name. The SDK's Neo4j backend must use the same name |
+
+Precedence for the neo4j flags: **explicit flag > env var > default**.
+
 ## The output contract
 The only thing the facade depends on is that, after a successful run, **`<output>/analysis.json`
 exists and conforms to `canonical-schema.md`** (or, with no `-o`, the same JSON is on

@@ -78,6 +78,9 @@ tooling choices genuinely differ per language and the user owns them.
   - `references/tooling-menu.md` — the per-language decision you'll walk the user through.
   - `references/cli-contract.md` — the CLI flags the analyzer must expose (the contract the
     frontend SDKs depend on; owned here).
+  - `references/neo4j-projection.md` — the **optional second output surface**: projecting the
+    same IR into a Neo4j graph via `--emit neo4j` (Cypher snapshot + live Bolt push). Every
+    mature analyzer ships it; add it once level-1 JSON is solid.
   - `references/testing-and-validation.md` — **all analyzer-side verification criteria, fixture
     design rules, and definitions of done.** Read before writing any tests. (SDK-side testing
     is the frontend skill's `references/sdk-testing.md`.)
@@ -292,6 +295,19 @@ its wheel carries code, imported in-process. **Release automation is standard pr
 and **record the published name + version** so the frontend skill can pin it. (`backend-recipe.md`
 steps 3, 8, 9; full spec in `references/packaging-and-release.md`; rationale in `tooling-menu.md`
 § "Packaging".)
+
+### (Optional) Neo4j graph projection — a second output surface
+Once the level-1 `analysis.json` path is solid, add the **optional Neo4j projection** every
+mature analyzer now ships (`references/neo4j-projection.md`). It is not an ingestion of the
+JSON — it's an **alternative projection of the same in-memory IR**, selected by `--emit neo4j`,
+producing either a self-contained `graph.cypher` snapshot or a live Bolt push, plus `--emit
+schema` for the static `schema.neo4j.json` contract. Build it as a modular `neo4j/` subpackage
+(`project` → `GraphRows` → `cypher`/`bolt` writers + a declarative `schema`), keep the driver an
+**optional/lazy** dependency, and hold the graph schema in lockstep with the JSON schema (same
+`SCHEMA_DECISIONS.md` node kinds → node labels; identity-only call edges → `CALLS`). The SDK's
+Neo4j backend (frontend skill) reconstructs the canonical model from this graph, so the node
+families and `--app-name` anchor must match. Leave it out only if the user explicitly scopes to
+JSON-only; otherwise it's a standard deliverable of the CLI/packaging stage.
 
 ### (Optional) Level 2: framework-based analysis
 Gated on the depth choice from *Orient & choose the backend tooling*. The heavy tier — a dedicated analysis engine
