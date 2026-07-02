@@ -44,6 +44,10 @@ GOALS (the contract, in one list)
    SCHEMA_DECISIONS.md.
 5. Keep `-a 1`/`-a 2` timings unaffected; content-hash and cache summaries with
    recorded dependency edges (incrementality is later, but its hooks are now).
+6. Deterministic parallelism (`-j/--jobs`): intraprocedural stages fan out per
+   callable; the points-to solve runs concurrently with them; summary
+   composition is a ready-queue wavefront over the SCC condensation DAG.
+   `--jobs N` output is byte-identical to `--jobs 1`.
 
 SUBSTRATE DECISIONS (locked — from dataflow-substrate-menu.md)
 
@@ -83,8 +87,10 @@ PART 2 — INTERPROCEDURAL (stages 5–7)
      and their read/write sites as summary inputs/outputs.
   7. SCC condensation (Tarjan) of the call graph; per-CFG hammock-region
      decomposition; bottom-up relational region summaries indexed by exit;
-     bottom-up function-summary composition over the condensation DAG;
-     monotone fixpoint within SCCs; k-limiting mandatory for termination.
+     bottom-up function-summary composition over the condensation DAG,
+     scheduled as a ready-queue wavefront (one SCC per worker; its internal
+     fixpoint stays sequential); monotone fixpoint within SCCs; k-limiting
+     mandatory for termination.
   8. External/library behavior as model summaries in the same relational format;
      unmodeled externals default to conservative pass-through (all arguments and
      reachable heap flow to the return and to external state).
@@ -124,6 +130,12 @@ CAVEATS AND KNOWN RISKS
   - Incrementality: aspirational, not in scope; summary dependency edges and
     content-hashes are recorded from the start so it can be switched on later
     without a rewrite.
+  - Parallel determinism: never assign ids or emit during parallel execution —
+    collect, then sort by (signature, node_id). Implement sequentially first
+    and pass every gate at --jobs 1; parallelize after, using the sequential
+    output as the differential oracle. --jobs 1 remains the debug mode.
+    Memory (N workers x ASTs/CFGs) is the real ceiling — release per-callable
+    structures once the PDG is emitted.
 
 STAGED PRs
 
@@ -132,9 +144,11 @@ STAGED PRs
   PR B  Oracle integration + identity mapping + call-graph merge with
         provenance; CI proves the solve runs in-process behind the flag.
   PR C  Intraprocedural: CFG + dominance + PDG, `program_graphs` emission for
-        cfg/pdg, the slice gate green on the fixture.
+        cfg/pdg, the slice gate green on the fixture; then per-callable
+        parallel fan-out (-j), differential-tested against --jobs 1.
   PR D  Summaries: hammock regions, SCC fixpoint with k-limiting; SDG assembly;
-        sdg_edges emission; MVP taint over the call graph.
+        sdg_edges emission; MVP taint over the call graph; then the ready-queue
+        wavefront over the SCC DAG, differential-tested against --jobs 1.
   PR E  Models-as-data: JSON spec + Schema, default pack, precedence; taint_flows
         output + lazy witness paths; SDK models co-evolved.
   PR F  Points-to-backed (alias-aware) propagation via <oracle>; replace the
@@ -156,6 +170,8 @@ VERIFICATION / DEFINITION OF DONE
     models; parity clause holds (no renamed/repurposed shared vocabulary).
   - Cypher snapshot with graphs loads clean into empty Neo4j; CFGNode count
     matches JSON; no dangling edges (deferred-edge gate).
+  - --jobs N output byte-identical to --jobs 1 on the fixture (determinism
+    gate), for both the per-callable fan-out and the SCC wavefront.
   - -a 1 / -a 2 wall-clock unchanged within noise on the benchmark fixture.
 ```
 

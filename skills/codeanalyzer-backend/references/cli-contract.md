@@ -18,6 +18,7 @@ are the references.
 | `--skip-tests / --include-tests` | Skip test trees | Default skip |
 | `--eager / --lazy` | Force clean rebuild vs reuse cache | Default lazy |
 | `-c, --cache-dir <dir>` | Where caches/intermediate DBs live | |
+| `-j, --jobs <n>` | Worker parallelism | Default: CPU cores. Output must be **byte-identical** across `-j` values (`dataflow-construction.md § Parallel execution model`); applies to the level-1 per-file build too |
 | `-v` | Verbosity (repeatable) | |
 
 **Neo4j projection flags** (optional second output surface — full spec in

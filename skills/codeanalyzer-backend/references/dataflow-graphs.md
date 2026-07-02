@@ -44,10 +44,6 @@ whole-program.
    call sites via `CALL`, `PARAM_IN`, `PARAM_OUT`, and transitive `SUMMARY` edges
    (Horwitz–Reps–Binkley). Global/module state is modeled as extra parameters. This is the graph
    client analyses (slicing, taint) query.
-5. **CPG (code property graph)** — **not a new engine**: the property-graph *overlay* of
-   AST + CFG + PDG in one graph, à la Joern. It is emitted **only** through the existing Neo4j
-   projection (`neo4j-projection.md`) as new node labels/edge types — never serialized into
-   `analysis.json`.
 
 ## Node identity (the invariant that makes everything joinable)
 
@@ -179,3 +175,8 @@ by the same `GraphRows`/writer machinery in `neo4j-projection.md`:
   now is what makes it a switch-flip later instead of a rewrite.
 - **k-limiting is mandatory** (access-path depth, CLI knob e.g. `--graph-field-depth`, default 3)
   — the interprocedural fixpoint does not terminate without it.
+- **Parallel by construction, deterministic by contract.** Intraprocedural stages fan out per
+  callable (embarrassingly parallel); the points-to solve runs concurrently with them; summary
+  composition is a wavefront (ready-queue) over the SCC condensation DAG. `--jobs N` output must
+  be **byte-identical** to `--jobs 1` — collect-then-sort, never emit during parallel execution.
+  Full model: `dataflow-construction.md § Parallel execution model`.

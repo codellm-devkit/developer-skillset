@@ -167,6 +167,56 @@ plus: the Cypher snapshot with graphs enabled loads clean into an empty Neo4j an
 
 ---
 
+## Parallel execution model
+
+Level 3 is compute-heavy but its dependency structure is explicit — exploit it. The units of
+work and their independence, per phase:
+
+| Phase | Unit of work | Parallelism |
+| --- | --- | --- |
+| Stages 1–4 (CFG, dominance, def-use, PDG) | one callable | **Embarrassingly parallel** — no cross-function dependencies; fan out over a worker pool |
+| Stage 5 points-to solve | whole program | Usually the **sequential bottleneck** — the oracle is a black box; run its single whole-program solve *concurrently with* stages 1–4 (they don't need it) and join before stage 6 |
+| Stages 6–7 (summaries → SDG) | one SCC | **Wavefront over the condensation DAG** (below) |
+| Stage 8 clients | one query / taint seed | Independent queries in parallel |
+| Emission / CPG rows | one module | Per-worker row builders, merged; deterministic sort at the end |
+
+**Wavefront (level-order) scheduling of the SCC DAG.** Summary composition processes the
+condensation DAG in reverse topological order; an SCC is *ready* when every callee SCC is
+summarized. Two implementations:
+
+- **Level barriers:** define height *h* = longest path to a leaf; process all SCCs of height
+  *h* in parallel, barrier, proceed to *h+1*. Simple, and the levels make a natural progress
+  display.
+- **Ready queue (preferred):** per-SCC dependency counters (Kahn-style); when a summary
+  completes, decrement its dependents and enqueue any that hit zero. Strictly more parallelism —
+  nothing waits on a level's slowest SCC without a true dependency.
+
+The SCC is the atomic unit either way: its internal fixpoint (mutually recursive members,
+co-defined summaries) runs on one worker.
+
+**Determinism is a hard requirement.** `--jobs N` must produce **byte-identical** output to
+`--jobs 1`:
+
+- The monotone framework already guarantees the *fixpoint* is schedule-independent (joins
+  commute); what varies under parallelism is *discovery order*. So never assign ids or emit
+  during parallel execution — collect, then sort by `(signature, node_id)` (the same
+  collect-then-sort rule the Neo4j `RowBuilder` follows).
+- **Implement sequentially first.** Pass every gate at `--jobs 1`, then parallelize using the
+  sequential output as the differential oracle. `--jobs 1` remains the debug mode forever.
+- Cache writes (content-hashed summaries) must be idempotent per key — two workers producing
+  the same summary is a benign race, not a conflict.
+- Watch memory, not just CPU: N workers each holding function ASTs/CFGs is the real ceiling;
+  release per-callable structures once the PDG is emitted.
+
+**Per-language mechanisms:** Go goroutines + `errgroup` (the ready-queue scheduler is ~50 lines
+and a good exercise in its own right); Rust `rayon`; Java `ForkJoinPool` / parallel streams;
+TS/JS `worker_threads` (Bun workers) — summaries must serialize cheaply across the
+structured-clone boundary; Python `multiprocessing` or Ray — `codeanalyzer-python` already
+exposes `use_ray` for exactly this shape of fan-out.
+
+Note the same structure exists at **level 1**: the per-file symbol-table build is independent
+per file, so the `-j/--jobs` flag (`cli-contract.md`) is not level-3-specific.
+
 ## Fixture minimums (extends `testing-and-validation.md § 1`)
 
 The level-3 fixture must contain, each with a named expected result in the tests:
