@@ -1,15 +1,15 @@
-# cldk-skillset
+# cldk-forge
 
-A [Claude Code](https://claude.com/claude-code) **plugin** of agent skills for extending
-[CodeLLM-DevKit (CLDK)](https://github.com/codellm-devkit): build a new language's backend
-analyzer, wire it into the SDKs, and grow it through the analysis levels — symbol table, call
-graph, and native dataflow.
+The forge where [CodeLLM-DevKit (CLDK)](https://github.com/codellm-devkit) gets built: a
+[Claude Code](https://claude.com/claude-code) **plugin** of agent skills for extending CLDK —
+build a new language's backend analyzer, wire it into the SDKs, and grow it through the
+analysis levels: symbol table, call graph, and native dataflow.
 
 ## Install
 
 ```
-/plugin marketplace add codellm-devkit/developer-skillset
-/plugin install cldk-skillset@cldk-skillset
+/plugin marketplace add codellm-devkit/cldk-forge
+/plugin install cldk-forge@codellm-devkit
 ```
 
 Then just describe the task — *"add Rust support to CLDK"*, *"build a codeanalyzer for Kotlin"*,

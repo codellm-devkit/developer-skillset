@@ -1,14 +1,14 @@
 {
-  "name": "cldk-skillset",
+  "name": "codellm-devkit",
   "owner": {
     "name": "Rahul Krishna",
     "email": "i.m.ralk@gmail.com"
   },
   "plugins": [
     {
-      "name": "cldk-skillset",
+      "name": "cldk-forge",
       "source": ".",
-      "description": "Build a language's backend analyzer (codeanalyzer-<lang>) and wire it into the CLDK frontend SDKs."
+      "description": "Build a language's backend analyzer (codeanalyzer-<lang>), wire it into the CLDK frontend SDKs, and grow it through the analysis levels."
     }
   ]
 }
