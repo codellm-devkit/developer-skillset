@@ -35,7 +35,10 @@ GOALS (the contract, in one list)
    (`program_graphs`, schema_version'd, keyed by canonical (signature, node_id)),
    gated by `-a 3` / `--graphs`.
 2. Project the CPG (AST+CFG+PDG overlay) through the existing Neo4j emitter as
-   new node labels / edge types; additive schema.neo4j.json bump.
+   new node labels / edge types; additive schema.neo4j.json bump. The graph
+   surface is level-agnostic: --emit neo4j always projects the full SDG;
+   -a/--graphs gate the JSON path only, and combining them with --emit neo4j
+   is an explicit error.
 3. Expose backward slicing and taint as SDG queries; sources/sinks/sanitizers/
    library models supplied as data (JSON spec + JSON Schema validation), emitted
    as a `taint_flows` section.

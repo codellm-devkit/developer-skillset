@@ -25,6 +25,10 @@ runs in-process in the analyzer's own language (Jelly, WALA, `go/ssa`) counts as
 orthogonal — its edges merge into the call graph with provenance, exactly as at level 2. The
 cheap path stays cheap: **nothing at level 3 may run unless requested.**
 
+The levels gate the **JSON path only**. When the output target is the graph (`--emit neo4j`),
+levels don't apply: the analyzer runs at maximum implemented depth and projects the **full SDG**
+unconditionally (`neo4j-projection.md § Depth rule`).
+
 ## The graph ladder (definitions and edge vocabulary)
 
 Each graph builds on the previous. All are **per-function** except the SDG and CPG, which are
@@ -97,8 +101,11 @@ facade invariant that `analysis.json` is the single facade-visible output:
   without `pdg` emits a PDG with only `DDG` edges.
 - Unrecognized `--graphs` values follow the **flag-validation rule** (`cli-contract.md`): explicit
   non-zero error, never silent fallback.
-- The CPG is **Neo4j-only**: `--emit neo4j` at `-a 3` adds the CFG/PDG/SDG labels and edge types
-  to the projection (see § CPG below). `--emit schema` includes them in `schema.neo4j.json`.
+- The CPG is **Neo4j-only**, and the graph surface is **level-agnostic**: `--emit neo4j` always
+  runs at maximum implemented depth and projects the full SDG — `-a` and `--graphs` gate only
+  the JSON path, and combining them with `--emit neo4j` is an explicit error
+  (`neo4j-projection.md § Depth rule`). `--emit schema` includes the CFG/PDG/SDG labels in
+  `schema.neo4j.json`.
 - `program_graphs.schema_version` is versioned independently of the top-level schema and bumps
   additively, like `schema.neo4j.json`.
 

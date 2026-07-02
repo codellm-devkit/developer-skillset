@@ -26,7 +26,7 @@ are the references.
 
 | Flag | Meaning | Notes |
 | --- | --- | --- |
-| `--emit <json\|neo4j\|schema>` | Output target | `json` (default) → `analysis.json`; `neo4j` → `graph.cypher` or live push; `schema` → static `schema.neo4j.json` (needs no `-i`) |
+| `--emit <json\|neo4j\|schema>` | Output target | `json` (default) → `analysis.json`; `neo4j` → `graph.cypher` or live push **at full depth — `-a`/`--graphs` do not apply and combining them errors** (`neo4j-projection.md § Depth rule`); `schema` → static `schema.neo4j.json` (needs no `-i`) |
 | `--neo4j-uri <uri>` | Live Bolt push target | Omit → write `graph.cypher` file. Env `NEO4J_URI` |
 | `--neo4j-user <user>` | Username | Env `NEO4J_USERNAME`, default `neo4j` |
 | `--neo4j-password <pw>` | Password | Env `NEO4J_PASSWORD`, default `neo4j` |
@@ -67,6 +67,9 @@ Two orthogonal axes, don't conflate them:
   backend. Off by default so the cheap path stays cheap.
 - **`-a 3`** adds the **native dataflow graphs** (CFG/PDG/SDG — `dataflow-graphs.md`), scoped by
   `--graphs`. Implies `-a 2`. Heavy but in-process; still orthogonal to the framework toggle.
+- **Levels gate the JSON path only.** With `--emit neo4j` the analyzer always runs at maximum
+  implemented depth and projects the full SDG; passing `-a`/`--graphs` alongside it is an
+  explicit error (`neo4j-projection.md § Depth rule`).
 
 The SDK passes its `AnalysisLevel` enum through to the `-a` flag; the framework backend is its
 own opt-in.
