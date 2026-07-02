@@ -81,6 +81,16 @@ tooling choices genuinely differ per language and the user owns them.
   - `references/neo4j-projection.md` — the **optional second output surface**: projecting the
     same IR into a Neo4j graph via `--emit neo4j` (Cypher snapshot + live Bolt push). Every
     mature analyzer ships it; add it once level-1 JSON is solid.
+  - `references/dataflow-graphs.md` — the **level-3 contract**: native CFG/DFG/PDG/SDG (+ the
+    CPG projection), node identity, `program_graphs` emission, parity clause, and verification
+    gates. Read before any dataflow work.
+  - `references/dataflow-construction.md` — the level-3 **method**: the stage-by-stage
+    algorithm ladder (CFG lowering → dominance → def-use → PDG → summaries → SDG → clients),
+    per-language lowering checklists, gates, and fixture minimums.
+  - `references/dataflow-substrate-menu.md` — the level-3 counterpart of the tooling menu:
+    per-language CFG / def-use / points-to substrate decisions.
+  - `references/dataflow-issue-template.md` — the planning template a language instantiates
+    (goals, locked substrate decisions, staged PRs, caveats) before building level 3.
   - `references/testing-and-validation.md` — **all analyzer-side verification criteria, fixture
     design rules, and definitions of done.** Read before writing any tests. (SDK-side testing
     is the frontend skill's `references/sdk-testing.md`.)
@@ -96,7 +106,7 @@ Work the steps below in order, and **don't design the whole thing up front**. De
 **scaffold the modular package skeleton**, materialize the project's dependencies, construct the
 symbol table file by file, then build the cheap resolver-based call graph. *Symbol Table Construction* + *Call Graph Construction* together
 are **level 1 — the cheap, resolver-based analysis** (symbol table *and* call graph, both from
-the same Tier-1 resolver). The heavy **level 2 — framework-based** analysis (WALA/CodeQL/Joern/
+the same Tier-1 resolver). The heavy **level 2 — framework-based** analysis (WALA/Joern/
 SVF) is optional and comes later. Each step models itself on what the mature reference analyzers
 (Java + Python) do.
 
@@ -113,7 +123,7 @@ download`).
 Also ask the **analysis depth** they want (`AskUserQuestion`):
 - **Rapid — level 1 (default):** symbol table + the cheap resolver-based call graph. The
   framework backend is left stubbed.
-- **Deep — level 2:** also stand up the framework-based backend (CodeQL/Joern/SVF/WALA),
+- **Deep — level 2:** also stand up the framework-based backend (Joern/SVF/WALA),
   flipping the *Level 2: framework-based analysis* step from stubbed to implemented.
 
 Default to **rapid (level 1)** — level 1 is always built (it's the floor; level 2 builds on it),
@@ -130,7 +140,7 @@ folder (create it if needed); only these tooling decisions are promoted into the
 
 **Then check the toolchain is installed, before building anything.** The chosen tooling has hard
 prerequisites (Node + the analyzer's deps for ts-morph; the Go toolchain for `go/types`; the
-Rust toolchain + rust-analyzer; clang/libclang for C++; plus any framework backend like CodeQL/
+Rust toolchain + rust-analyzer; clang/libclang for C++; plus any framework backend like
 Joern if *deep*) **and the packaging/release toolchain that cross-compiles and publishes the
 `codeanalyzer-<lang>` package** (e.g. Bun for `bun build --compile --target=...`, GraalVM
 `native-image` for JVM, the cross-compile target for Go/Rust; plus Python `build`/`wheel`/`twine`
@@ -247,7 +257,7 @@ outlier** — it has no cheap resolver call graph, so its call graph *is* the he
 pass (`makeRTABuilder` → **RTA**), which for a new resolver-capable language belongs in the
 *Level 2: framework-based analysis* step. For the chosen resolver, surface the dispatch choice
 (declared-type only ≈ CHA, + instantiated subtypes ≈ RTA-style); heavier framework-based
-precision (WALA/CodeQL/Joern/SVF) belongs to that level-2 step, not here.
+precision (WALA/Joern/SVF) belongs to that level-2 step, not here.
 
 **Verify:** confirm the criteria in `references/testing-and-validation.md § 2` (call-graph
 gate) — every edge endpoint matches a real signature (no dangling nodes) and output still
@@ -311,12 +321,24 @@ JSON-only; otherwise it's a standard deliverable of the CLI/packaging stage.
 
 ### (Optional) Level 2: framework-based analysis
 Gated on the depth choice from *Orient & choose the backend tooling*. The heavy tier — a dedicated analysis engine
-(CodeQL/Joern/SVF, or WALA-style; `backend-recipe.md` step 7) for points-to/dataflow edges the
+(Joern/SVF, or WALA-style; `backend-recipe.md` step 7) for points-to/dataflow edges the
 cheap resolver can't reach. If the user picked **rapid (default)**, leave it a wired, flag-gated
 extension point with a clear TODO. If they picked **deep**, implement it now and merge its edges
 into the resolver graph by `(source, target)` with provenance union. (For a language whose call
 graph is *only* available this way — e.g. Java/WALA — this stage is where that call graph lives,
 regardless of the depth choice.)
+
+### (Optional) Level 3: native dataflow graphs
+A separate, later body of work — never part of the initial language bring-up. When the user asks
+for dataflow, slicing, or taint ("CFG/PDG/SDG", "reachability", "what does this value affect"),
+plan it with `references/dataflow-issue-template.md` (one epic issue, staged PRs), decide the
+substrate slots from `references/dataflow-substrate-menu.md` (confirmed with the user, recorded
+in the README's *Architecture & Tooling*), and build stage by stage per
+`references/dataflow-construction.md` against the contract in `references/dataflow-graphs.md`.
+The rules that bind: everything is **native and in-process**; graphs are keyed by
+`(signature, node_id)` on the same `signatureOf()`; each stage's gate passes before the next
+stage starts; `-a 1`/`-a 2` stay untouched; the **SDG is the core artifact** (clients query it),
+and the CPG is only its Neo4j projection — skip the CPG if the Neo4j surface isn't in scope.
 
 ### Write the analyzer README (last build step)
 The analyzer's `codeanalyzer-<lang>/README.md` already holds the **Architecture & Tooling**
@@ -470,7 +492,7 @@ State these explicitly in the summary so the frontend skill (or a later session)
   *existing* analyzer with a new contribution point is `codeanalyzer-extension-builder`.
 - **No invented tooling.** If a recommended parser/resolver doesn't exist for the language,
   say so and fall back per the menu's reasoning (compiler API → tree-sitter + external
-  resolver → CodeQL/Joern), rather than inventing a package name.
+  resolver → Joern), rather than inventing a package name.
 - **Path predicates must operate on relative paths.** Any skip predicate (`IsVendored`,
   `IsTestFile`, or a custom equivalent) applied to an absolute file path will silently match
   directory segments from the analyzer's own source tree and discard all files under them.

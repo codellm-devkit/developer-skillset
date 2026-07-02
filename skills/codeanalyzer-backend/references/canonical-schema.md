@@ -85,7 +85,7 @@ resolver call graph is built),
 ### CallEdge (identity-only)
 `source` (caller signature), `target` (callee signature), `type` (`"CALL_DEP"`),
 `weight` (int, accumulated when merging backends), `provenance[]` (e.g. `["tsc"]`,
-`["jedi","codeql"]`), `tags{}` (free-form, extension-namespaced).
+`["jedi","joern"]`), `tags{}` (free-form, extension-namespaced).
 
 ### Entrypoint (optional)
 `signature` (references a Callable), `framework`, `detection_source`

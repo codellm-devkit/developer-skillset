@@ -20,8 +20,8 @@ about the rest only if the user engages.
 | --- | --- | --- | --- |
 | 1 | **Native runtime/ecosystem** | Where the analyzer process runs | Follow the language's own toolchain (don't analyze Go from Python if Go has native tooling) |
 | 2 | **Structural pass (parser)** | How files become a parse tree (step 5) | tree-sitter grammar if one exists and you only need structure; else the language's native AST / compiler API |
-| 3 | **Resolution (symbols/types)** | How call sites resolve to declarations (step 6) | Reuse the structural tool **if it also resolves** (TS checker, clang); else add an LSP / type checker / Jedi-equivalent; CodeQL as a heavyweight fallback |
-| 4 | **Framework-based analysis backend** (optional) | A dedicated analysis engine (WALA/CodeQL/Joern) for deeper edges (step 7) | Off by default; offer CodeQL or Joern behind a flag if the language has a CPG/IR frontend |
+| 3 | **Resolution (symbols/types)** | How call sites resolve to declarations (step 6) | Reuse the structural tool **if it also resolves** (TS checker, clang); else add an LSP / type checker / Jedi-equivalent; Joern as a heavyweight fallback |
+| 4 | **Framework-based analysis backend** (optional) | A dedicated analysis engine (WALA/Joern) for deeper edges (step 7) | Off by default; offer Joern behind a flag if the language has a CPG frontend |
 | 5 | **Build/dep materialization** | What to set up before resolution (step 4) | Whatever slot 3 needs: classpath, venv, `node_modules`, module graph |
 | 6 | **Packaging** | How the SDK invokes it (step 9) | **Be opinionated: compile to a self-contained binary** so SDK users need no language runtime (Go/Rust/C++ native; TS via `bun build --compile`/`deno compile`; JVM via GraalVM `native-image`). Version-pinned. pip package (in-process) **only** if the analyzer is itself Python |
 
@@ -34,7 +34,7 @@ This is the question that most changes the shape of the analyzer:
   compiler and need its project model (e.g. `tsconfig.json`) materialized.
 - **Separate tools** (tree-sitter for structure + a distinct resolver for types — the Go,
   Rust, Ruby shape). The structural pass is fast and dependency-light; resolving call sites
-  needs a second tool (gopls/`go/packages`, rust-analyzer, Sorbet, or CodeQL). More moving
+  needs a second tool (gopls/`go/packages`, rust-analyzer, or Sorbet). More moving
   parts, but the structural path stays genuinely cheap.
 
 Name this explicitly in the build plan, because it determines whether step 6 reuses the
@@ -52,7 +52,7 @@ whole-program in *reach*. The real difference is the **engine** and the precisio
   same tool that built the symbol table, so it's cheap. Precision = what the type system gives:
   exact for static/monomorphic dispatch, with an explicit unresolved fallback for the dynamic
   cases. This is the default base graph.
-- **Tier 2 — Framework-based** (a dedicated analysis engine: WALA, CodeQL, Joern). Builds the
+- **Tier 2 — Framework-based** (a dedicated analysis engine: WALA, Joern, SVF). Builds the
   graph via global reachability / points-to / dataflow over an IR, bytecode, or CPG — this is
   where RTA, Andersen points-to, and taint live, and where indirect/dynamic dispatch the
   resolver missed gets caught. More setup and cost; gate it behind a flag (step 7).
@@ -91,7 +91,7 @@ These are starting points to present, not laws. Confirm with the user.
 - Runtime: **Node**
 - Structural + resolution: **ts-morph** (wraps the TypeScript compiler API — one tool does
   both; the checker resolves call targets, types, and `extends`/`implements`)
-- Enrichment (optional): **Joern `jssrc2cpg`** or **CodeQL** for dynamic dispatch
+- Enrichment (optional): **Joern `jssrc2cpg`** for dynamic dispatch
 - Build/deps: read `tsconfig.json`, ensure `node_modules`
 - Packaging: **`bun build --compile`** (or `deno compile`) → single self-contained binary that
   bundles the Node runtime, so SDK users need **no** Node install. *Avoid* a plain npm bin / `node
@@ -104,7 +104,7 @@ These are starting points to present, not laws. Confirm with the user.
 - Structural: **tree-sitter-go** (or `go/ast`) for the fast level-1 walk
 - Resolution (Tier 1): **`go/packages` + `go/types`** (native, accurate) — the separate
   resolver; or gopls if you want LSP-driven resolution
-- Framework backend (Tier 2, optional): **CodeQL** Go pack
+- Framework backend (Tier 2, optional): **Joern** (`gosrc2cpg`)
 - Build/deps: `go mod download` so `go/packages` can load the module graph
 - Packaging: `go build` → single static binary (natural fit), version-pinned
 - Add node kinds: `struct`, `interface`; methods carry a receiver type; embedded structs and
@@ -116,7 +116,7 @@ These are starting points to present, not laws. Confirm with the user.
 - Structural + resolution (Tier 1): **libclang / Clang AST** — one tool does both; the checker
   resolves overloads and virtual dispatch via the class/vtable hierarchy.
 - Framework backend (Tier 2, optional): **LLVM IR + SVF or Phasar** — Andersen/Steensgaard
-  points-to, *stronger* than RTA; or CodeQL C++. This is the one new-language case (like Java)
+  points-to, *stronger* than RTA. This is the one new-language case (like Java)
   with a true heavyweight builder available.
 - Build/deps: a **compilation database** (`compile_commands.json` via
   `CMAKE_EXPORT_COMPILE_COMMANDS=ON` or Bear) so clang gets per-translation-unit include
@@ -132,8 +132,8 @@ These are starting points to present, not laws. Confirm with the user.
 - Resolution (Tier 1): **rust-analyzer** (name resolution + type inference). Generics are
   **monomorphized**, so most calls are static dispatch — exact; trait objects (`dyn Trait`)
   resolve over the impl set, closures/fn-pointers are the indirect cases.
-- Framework backend (Tier 2, optional): **MIR-based** (rustc internals, nightly) or the
-  **emerging CodeQL Rust** pack — be honest with the user that this tier is *less mature* than
+- Framework backend (Tier 2, optional): **MIR-based** (rustc internals, nightly)
+  — be honest with the user that this tier is *less mature* than
   C++/Java; there is no WALA-grade builder yet.
 - Build/deps: `cargo metadata` / `cargo fetch` (and `cargo build` if going to MIR)
 - Packaging: `cargo build` → single static binary (natural fit)
@@ -142,11 +142,11 @@ These are starting points to present, not laws. Confirm with the user.
   expanded code vs source); trait bounds → `base_classes`.
 
 ### Other languages (how to reason)
-- **Ruby**: tree-sitter-ruby + Sorbet/RBS or a CodeQL pack; bundler for deps.
+- **Ruby**: tree-sitter-ruby + Sorbet/RBS or Joern (`rubysrc2cpg`); bundler for deps.
 - **C#**: Roslyn (does both, like TS); `dotnet build`.
 - General rule: **prefer the compiler's own API when it exposes one** (best resolution) for the
   Tier-1 resolver, fall back to tree-sitter + an external resolver when it doesn't, and reach
-  for a Tier-2 framework backend (WALA/CodeQL/Joern/SVF) only for the points-to/dataflow cases
+  for a Tier-2 framework backend (WALA/Joern/SVF) only for the points-to/dataflow cases
   the native resolver can't reach.
 
 ## Output of this step
