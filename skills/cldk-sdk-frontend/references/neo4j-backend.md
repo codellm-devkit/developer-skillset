@@ -12,6 +12,12 @@ object (`cldk/analysis/commons/backend_config.py`):
 Ship the Neo4j backend **only if** your analyzer emits a graph. It is optional at every layer,
 so it must not become a hard dependency.
 
+**The graph is full-depth by contract**: `--emit neo4j` is level-agnostic on the analyzer side —
+it always projects everything the analyzer implements (symbol table, call graph, and the full
+SDG once level 3 exists). So the Neo4j backend takes no analysis-level knob: it serves whatever
+is in the graph, deriving its effective level from what it finds (as `JNeo4jBackend` does for
+`call_graph`), and program-graph accessors need no gating.
+
 ## The parity contract
 
 The whole point of the backend ABC (`<Lang>AnalysisBackend`) is that **both backends are

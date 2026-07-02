@@ -27,6 +27,28 @@ the JSON path depends on it.
 Precedence is **explicit flag > env var > default**. `--emit schema` is a static artifact and
 must run without `-i`; every other target requires `-i`.
 
+## Depth rule: the graph is always full
+
+**Analysis levels do not apply to the graph surface.** `--emit neo4j` runs the analyzer at its
+**maximum implemented depth** and projects everything — symbol table, call graph, and (once
+level 3 exists) the complete CFG/PDG/SDG, i.e. the full CPG. There is no such thing as a
+"symbol-table-only" graph:
+
+- A queryable graph database is a whole-picture artifact — a partial graph silently answers
+  queries wrongly ("no path from source to sink" when the dataflow edges were simply never
+  projected).
+- Incremental Bolt pushes need a **stable node/edge vocabulary** across runs; a graph whose
+  shape depends on the flags of whichever run last touched it is unmergeable.
+
+Consequently `-a`/`--analysis-level` and `--graphs` are **JSON-path flags only**. Passing either
+together with `--emit neo4j` is an **explicit non-zero error** (per `cli-contract.md § Flag
+validation requirements` — never silently ignore a flag), e.g.:
+```
+error: --analysis-level does not apply to --emit neo4j; the graph is always projected at full depth
+```
+This also means `--emit neo4j` inherits level-3 cost once dataflow exists — that is by design;
+the cheap path is `--emit json` at `-a 1`.
+
 ## Modular structure (a `neo4j/` subpackage, mirroring the analyzer's modularity rules)
 
 The three reference analyzers converge on the identical shape — replicate it:

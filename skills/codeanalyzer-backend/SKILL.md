@@ -316,8 +316,11 @@ schema` for the static `schema.neo4j.json` contract. Build it as a modular `neo4
 **optional/lazy** dependency, and hold the graph schema in lockstep with the JSON schema (same
 `SCHEMA_DECISIONS.md` node kinds → node labels; identity-only call edges → `CALLS`). The SDK's
 Neo4j backend (frontend skill) reconstructs the canonical model from this graph, so the node
-families and `--app-name` anchor must match. Leave it out only if the user explicitly scopes to
-JSON-only; otherwise it's a standard deliverable of the CLI/packaging stage.
+families and `--app-name` anchor must match. **The graph is always full-depth:** analysis levels
+gate the JSON path only — `--emit neo4j` runs at maximum implemented depth (once level 3 exists,
+the complete SDG/CPG, unconditionally), and combining `-a`/`--graphs` with it is an explicit
+error (`neo4j-projection.md § Depth rule`). Leave the projection out only if the user explicitly
+scopes to JSON-only; otherwise it's a standard deliverable of the CLI/packaging stage.
 
 ### (Optional) Level 2: framework-based analysis
 Gated on the depth choice from *Orient & choose the backend tooling*. The heavy tier — a dedicated analysis engine
