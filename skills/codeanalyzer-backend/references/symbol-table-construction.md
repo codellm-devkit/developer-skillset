@@ -1,10 +1,17 @@
-# Symbol Table Construction (file by file)
+# L1 — build the tree (symbol table, file by file)
 
-Once the schema is designed (`schema-design-loop.md`), this stage **populates** it: walk the
-project file by file and build `symbol_table: Dict[file_path, Module]`. Like the schema, you
-build this by **studying how the mature reference analyzers do it** and replicating the pattern
-for the new language — they have already solved file discovery, per-file building, caching, and
-the whole-project / target-files / single-source modes.
+The first level of the additive schema (`canonical-schema.md`): grow the **containment tree to
+callable depth** — `application → symbol_table{module} → types{}/functions{} → callables{}` —
+file by file. This is the floor everything else hangs off. You build it by **studying how the
+mature reference analyzers do it** and replicating the pattern for the new language — they have
+already solved file discovery, per-file building, caching, and the whole-project / target-files /
+single-source modes.
+
+**v2 shape (vs the old flat symbol table):** every node carries an `id` (the `can://` path), a
+`kind`, and a `span` **with byte offsets**; the **module stores the whole file's `source` once**
+(all node text slices off it — no per-callable `code`); and call sites are recorded as `call`
+nodes in each callable's `body` with `callee: null` (so `get_call_sites` works at L1; L2 backfills
+`callee`). The tree is otherwise the named-map hierarchy of `canonical-schema.md`.
 
 ## Anchor: how Java and Python construct the symbol table
 
@@ -39,12 +46,13 @@ map keyed by path**, with three entry modes (all / target-files / single-source)
    `symbol_table` key and must be identical across runs (so caching and the SDK's file lookups
    work).
 3. **Per file, cache-check then build.** If a prior `analysis_cache.json` has this file and its
-   `content_hash`/`last_modified`/`file_size` are unchanged, reuse the cached `Module`.
+   `content_hash`/`last_modified`/`file_size` are unchanged, reuse the cached `module`.
    Otherwise call your **per-file builder** (the analog of `build_pymodule_from_file` /
-   `processCompilationUnit`): parse with the structural tool, walk the tree, and fill the
-   `Module` with classes / functions / language-native kinds / callables — and on each callable
-   the **unresolved call sites** (callee name + receiver expr + arg exprs + position,
-   `callee_signature` left null). Stamp the cache metadata on the `Module`.
+   `processCompilationUnit`): parse with the structural tool, retain the file's text as the
+   module's **`source`**, walk the tree, and fill the `module` with `types` / `functions` /
+   language-native kinds / `callables` — each node with its `id`, `kind`, and `span` (with byte
+   offsets). On each callable, record the **call sites as `call` nodes in `body`** (callee name +
+   receiver expr + arg exprs + span, `callee: null`). Stamp the cache metadata on the `module`.
 4. **Assemble** `symbol_table[file_key] = module` for every file.
 5. **Support the three CLI modes** (`cli-contract.md`): whole-project (extractAll-style),
    `-t/--target-files` incremental (extract-style), and optionally single-source.
@@ -65,18 +73,20 @@ split per node kind into sibling modules under `syntactic_analysis/`. **Do not**
 threading state through arguments, with `buildClass`/`buildInterface`/`buildEnum` scattered across
 the file. See `analyzer-architecture.md` rule 2.
 
-Keep this stage to the symbol table — record call sites but **don't resolve them into edges**
-yet. That resolution is the *cheap next step* (still level 1; `backend-recipe.md` step 6), where
-the same resolver maps each site to its callee. Type fields may be populated here if your
-resolver is a same-tool checker; only the edge resolution is deferred to the next stage.
+Keep this stage to L1 — record the `call` nodes but **don't resolve them into edges** yet. That
+resolution is L2 (`backend-recipe.md`), where the same resolver maps each `call` node to its
+callee (backfilling `callee`) and emits the `call_graph`. Type fields may be populated here if
+your resolver is a same-tool checker; only the edge resolution is deferred.
 
-## Verify (the level-1 gate)
+## Verify (the L1 gate)
 Run the analyzer on a tiny fixture project and confirm:
-- the output **validates** against the SDK `<L>Application` Pydantic model
-  (`<L>Application(**json.load(...))` does not raise);
-- `symbol_table` is non-empty and keyed by stable relative paths;
-- spot-check one known file: its `Module` has the expected classes/functions, and callables
-  carry unresolved call sites with `callee_signature == null`;
+- the output **validates** against the SDK `Application` model (`Application(**json.load(...))`
+  does not raise);
+- `symbol_table` is non-empty and keyed by stable relative paths (no absolute, no `..`);
+- spot-check one known file: its `module` has the expected `types`/`functions`, a `source` blob,
+  and callables carrying `call` nodes with `callee: null`; a callable's text = `module.source`
+  sliced by `span.bytes` (`get_method_body`);
 - re-running reuses cache for unchanged files (no rebuild).
 
-Only when this passes do you move to call-graph construction.
+Only when this passes do you move to L2 (call-graph construction). Full criteria:
+`testing-and-validation.md`.

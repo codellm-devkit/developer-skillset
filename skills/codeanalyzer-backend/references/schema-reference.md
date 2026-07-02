@@ -69,9 +69,9 @@ Top-level siblings of `application` carry the manifest: `schema_version`, `langu
 
 | kind | Level | Extra fields | Notes |
 | --- | --- | --- | --- |
-| `entry` / `exit` | 3 | — | Synthetic; one each per callable; no span. |
+| `call` | **1** | `callee` (id, **`null` until L2/resolver backfill**), `arguments:[local-id]` | Call sites — recorded at L1 so `get_call_sites` is an L1 accessor; `callee` is the one refinement slot. |
+| `entry` / `exit` | 3 | — | Synthetic CFG endpoints; one each per callable; no span. |
 | `statement` | 3 | — | Ordinary statement; text = `module.source[span.bytes]`. |
-| `call` | 3 | `callee` (id, **`null` until L2/resolver backfill**), `arguments:[local-id]` | The one refinement slot. |
 | `return` | 3 | — | Edge to `exit`. |
 | `branch` / `loop` / `switch` | 3 | — | Control constructs; sources of `cfg` branch edges + `cdg`. |
 | `formal_in` | 4 | `of` (param name) | Synthetic; child of the callable; one per formal. |

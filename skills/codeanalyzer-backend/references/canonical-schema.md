@@ -114,10 +114,15 @@ at **L1 and L3**; L2 adds only edges; L4 adds synthetic vertices + edges.
 
 | Level | Grows (nodes) | Adds (edges) | Cost / substrate | Flag |
 | --- | --- | --- | --- | --- |
-| **1** | the tree to **callable** depth (call sites recorded as call-nodes appear at L3) | — | cheap, parser + resolver | `-a 1` / `-a 2` |
-| **2** | none | `call_graph` (callable → callable) | cheap | `-a 2` |
-| **3** | `body` **statements** under each callable | `cfg`, `cdg`, `ddg` (**syntactic**) — all intra-callable | heavy, **AST-only, per-callable parallel** | `-a 3` |
+| **1** | the tree to **callable** depth, + `call` nodes in `body` (call sites, `callee` unresolved) | — | cheap, parser + resolver | `-a 1` |
+| **2** | `callee` on each `call` node backfilled (`null → id`) | `call_graph` (callable → callable) | cheap | `-a 2` |
+| **3** | the **rest of `body`** (non-call statements) under each callable | `cfg`, `cdg`, `ddg` (**syntactic**) — all intra-callable | heavy, **AST-only, per-callable parallel** | `-a 3` |
 | **4** | **synthetic** param vertices (formal/actual in-out) | `param_in`, `param_out`, `summary`, + `ddg` (**semantic**, alias-aware) | heaviest: **needs the points-to oracle** + summary fixpoint | `-a 4` |
+
+`body` therefore begins at **L1** holding just the `call` nodes (so `get_call_sites` is an L1
+accessor, preserving the old SDK surface) and completes at **L3** with the remaining statements.
+Depth grows at L1 (tree + call sites) and L3 (full body); L2 is a pure refinement + edge add; L4
+adds synthetic vertices + cross edges.
 
 `-a 3` implies `-a 2`; `-a 4` implies `-a 3`. Framework enrichment (Joern/WALA) and points-to
 precision are an **orthogonal axis** — provenance-merged evidence into an existing edge family,
