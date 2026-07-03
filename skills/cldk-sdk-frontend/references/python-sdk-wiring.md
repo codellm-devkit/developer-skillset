@@ -41,27 +41,34 @@ than committing unrelated changes.
 
 ## Files to create / edit (checklist)
 
-### 1. Models — `cldk/models/<lang>/`
-- `models.py` — Pydantic models mirroring the analyzer's emitted schema **field-for-field** (the
-  local `schema-contract.md`, backed by the **codeanalyzer-backend** skill's exhaustive
-  `schema-reference.md`) — every
-  shared field, not a subset): `<L>Application`, `<L>Module`, `<L>Class`, `<L>Callable`,
-  `<L>Callsite`, `<L>CallEdge`, the leaf models (Import/Comment/Parameter/Decorator/Symbol/
-  VariableDeclaration/ClassAttribute), plus language node kinds (`<L>Interface`, `<L>Enum`,
-  `<L>Struct`, …). Use the **identity-only** `<L>CallEdge` (bare-string `source`/`target`),
-  not Java's rich-edge model. Field names must match the JSON keys exactly so
-  `<L>Application(**json.load(f))` validates. **Build these models first** — they are both the
-  SDK binding and the validation target the analyzer's output is checked against.
-  These `<L>` models are also where the language's **own** node kinds and fields live: when the
-  analyzer expands the schema (recorded in the **codeanalyzer-backend** skill's `schema-reference.md`
-  and its `SCHEMA_DECISIONS.md`), add the matching field/model here in the
-  same change so output keeps validating. Pydantic ignores unknown JSON keys by default, so an
-  analyzer field with no model field is silently dropped on load — define it on both sides.
-  (For loud failures on drift while developing, set `model_config = ConfigDict(extra="forbid")`.)
-- `__init__.py` — export the public model names.
-- Copy `cldk/models/java/models.py` as the structural template (it is the subprocess-side
-  schema). For an in-process Python-style backend, re-export upstream models like
-  `cldk/models/python/__init__.py` does instead of redefining them.
+### 1. Models — the shared `cldk/models/cpg/` + per-language view aliases
+Schema v2 is **one node-tree modeled once**, not a per-language Pydantic tree (`schema-contract.md`).
+So the model work is:
+- **`cldk/models/cpg/` (shared, build once, may already exist for another language):**
+  - `models.py` — `AnalysisPayload` (envelope: `schema_version`, `language`, `max_level`,
+    `k_limit?`, `application`), `Application`, `Module`, `Node` (single model, `kind` string
+    discriminator, all kind-specific fields Optional), `Edge` (`{src, dst, kind?, var?, prov[],
+    weight}`), `Span`, `Import`, `Param`, `Decorator`. All inherit `_NullSafeBase`. Field names
+    match the v2 JSON keys so `AnalysisPayload(**json.load(f))` validates.
+  - `views.py` — `CallableView`, `TypeView`, `ModuleView`, `CallsiteView`, `FieldView`: thin
+    `(node, module)` wrappers exposing the **old field names** as `@property`/`@computed_field`
+    (`.signature`, `.parameters`, `.code` = source slice, `.call_sites` = `body` call nodes,
+    `ModuleView.classes/.interfaces` = kind-filters over one `types{}`).
+  - `index.py` — build `by_id`, `sig_to_id`, `owner_module` once at load; the string-addressed
+    public API (which speaks `signature`) resolves signature→id here.
+- **`cldk/models/<lang>/__init__.py` shrinks to aliases + registration:**
+  ```python
+  from cldk.models.cpg.views import CallableView, TypeView, ModuleView, CallsiteView
+  from cldk.models.cpg.models import Application
+  <L>Callable, <L>Class, <L>Module, <L>Callsite, <L>Application = \
+      CallableView, TypeView, ModuleView, CallsiteView, Application
+  ```
+  This preserves every old import path and return type. The language's **own** node kinds and
+  fields are **additive Optional fields on the one `Node`** + a `kind` string value (recorded in
+  the analyzer's `SCHEMA_DECISIONS.md`) — no new per-language Pydantic class. Keep `_NullSafeBase`
+  (Go/Rust/C serialize empty collections as `null`).
+- **Do not** copy `cldk/models/java/models.py` (v1 per-language rich-edge tree). The v2 template is
+  the shared `cpg/` package; the first language to migrate builds it, the rest add fields/aliases.
 
 ### 2. Backend config — `cldk/analysis/commons/backend_config.py`
 - Add a `<Lang>CodeAnalyzerConfig(CodeAnalyzerConfig)` subclass if the language has backend-only
@@ -197,8 +204,13 @@ Language-specific backend knobs now live on the config subclass (Python `use_ray
 - **Tier A — lifecycle / whole-program (the must-haves; make CLDK usable):**
   `get_application_view`, `get_symbol_table`, `get_call_graph` (→ `nx.DiGraph`),
   `get_call_graph_json`, `get_callers`, `get_callees`, `get_class_call_graph`,
-  `get_class_hierarchy`. Note `get_call_graph` and `get_class_hierarchy` are **derived** — built
-  from the model's edges / `base_classes` — the rest index into the model.
+  `get_class_hierarchy`. Note `get_call_graph` and `get_class_hierarchy` are **derived** —
+  `get_call_graph` from `application.call_graph` (nodes = callable **ids**), `get_class_hierarchy`
+  from each type node's `base_types`/`interfaces` (ids) — the rest index into the tree.
+  **(Tier E — bulk/program-graph accessors** that v2 newly makes modelable: `get_program_graph(sig)`
+  over `body{}` + `cfg`/`cdg`/`ddg`/`summary`, slicing/taint over `ddg ∪ param_in ∪ param_out`,
+  `flows_to_statement("file:line:col")` — add these as *new* methods; don't retrofit existing
+  signatures.)
 - **Tier B — symbol-table navigation (should-have):** `get_classes` / `get_class` /
   `get_classes_by_criteria`; `get_methods` / `get_methods_in_class` / `get_method` /
   `get_method_parameters` / `get_constructors`; `get_fields`; `get_imports`;
@@ -267,23 +279,29 @@ NSArray. Add a mocked test that passes a `null` list field and confirms the mode
 without error. (Note the existing TS models use a strict `_Base` with `extra="forbid"` for
 the opposite goal — catching drift; the two bases are not in conflict, pick per language.)
 
-### `_level_flag()` must emit integers, not enum names
+### `_level_flag()` must emit integers, not enum names — and v2 has four levels
 
-The CLI flag is `--analysis-level 1` or `--analysis-level 2` (integers). The Python
-`AnalysisLevel` enum has string values (`"symbol_table"`, `"call_graph"`). The backend
-wrapper must explicitly map:
+The CLI flag is `-a`/`--analysis-level` with **integer** values `1|2|3|4` (v2:
+1 = symbol table, 2 = + call graph, 3 = + intraprocedural `cfg`/`cdg`/`ddg`, 4 = + interprocedural
+`param_*`/`summary`). The Python `AnalysisLevel` enum has *string* values, so the wrapper must map
+explicitly to the integer:
 
 ```python
 @staticmethod
 def _level_flag(analysis_level: str) -> str:
-    if analysis_level == AnalysisLevel.call_graph:
-        return "2"
-    return "1"
+    return {
+        AnalysisLevel.symbol_table: "1",
+        AnalysisLevel.call_graph: "2",
+        AnalysisLevel.program_dependency_graph: "3",
+        AnalysisLevel.system_dependency_graph: "4",
+    }.get(analysis_level, "1")
 ```
 
-Sending `--analysis-level symbol_table` will either be rejected by the CLI or silently
-treated as level 0. This bug is invisible to mocked tests — it only surfaces in E2E tests
-(which is why `sdk-testing.md § 3` mandates them).
+Sending `--analysis-level symbol_table` (the string) is rejected or silently mis-read — a bug
+invisible to mocked tests, only caught by E2E (`sdk-testing.md § 3`). On the *read* side, don't
+infer the level from which keys are present — read **`payload.max_level`** (the authoritative
+marker); `get_call_sites` still works at L1 (call sites are `body` nodes from L1), the dataflow
+overlays appear from L3/L4.
 
 ### Binary discovery: `shutil.which()` vs bundled artifact
 
@@ -311,10 +329,14 @@ to fix it — don't just say "binary not found".
 ## Definition of done for this surface
 - `CLDK.<lang>(project_path=<fixture>)` (and the legacy `CLDK(language="<lang>").analysis(...)`
   shim) returns a facade whose `get_symbol_table()` is non-empty and `get_call_graph()` builds
-  a NetworkX graph with no dangling nodes (every edge endpoint is a real callable signature).
+  a NetworkX graph with **no dangling nodes** (every edge endpoint is a real node **id** in the
+  tree) — the node key is now the `can://` id, with `signature` as a node attribute.
+- The **public API is unchanged**: every pre-migration accessor keeps its name and return type
+  (verified against the frozen API surface); the `<L>*` return types are the shared views.
 - Mocked tests pass under the SDK's runner (`uv run pytest` / `pytest`) with the backend
   patched; E2E tests exist and skip cleanly when the binary is absent.
 - The concrete backend implements every `<Lang>AnalysisBackend` ABC method
   (`test_<lang>_backend_contract.py`).
-- `pyproject.toml [tool.backend-versions]` is pinned to the released analyzer version.
+- `pyproject.toml [tool.backend-versions]` is pinned to the released **v2 (major-bumped)** analyzer
+  version — only after both analyzer and SDK are cut (`codeanalyzer-backend/references/schema-migration.md`).
 - All changes sit on the `add-<lang>-support` branch; summarize the diff for the user.
