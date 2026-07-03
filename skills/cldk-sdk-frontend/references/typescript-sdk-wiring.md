@@ -32,19 +32,23 @@ committing unrelated changes.
 
 ## Files to create / edit (checklist)
 
-### 1. Models — `src/models/<lang>/`
-Mirror `src/models/java/`, which splits the schema across several files (don't collapse them):
-- `schema.ts` — the canonical types mirroring the emitted `analysis.json` and the contract in
-  `schema-contract.md` **field-for-field** (every field the sample carries, not a subset):
-  `<L>Application`, `<L>Module`, `<L>Class`, `<L>Callable`,
-  `<L>Callsite`, `<L>CallEdge`, the leaf types (Import/Comment/Parameter/Decorator/Symbol/
-  VariableDeclaration/ClassAttribute), plus language node kinds (`<L>Interface`, `<L>Enum`,
-  `<L>Struct`, …). Use the **identity-only** `<L>CallEdge` (bare-string `source`/`target`), not
-  Java's rich-edge model. Property names must match the JSON keys exactly so a parsed
-  `analysis.json` satisfies the type.
-- `types.ts` / `enums.ts` — supporting type aliases and enums, as the Java models do.
-- `builders.ts` / `lookupTable.ts` — only if you reproduce Java's builder/lookup helpers; skip
-  if your facade indexes the parsed object directly.
+### 1. Models — the shared v2 CPG types + per-language view aliases
+Schema v2 is **one node-tree modeled once** (`schema-contract.md`), so the TS side mirrors the
+Python two-layer approach:
+- `src/models/cpg/schema.ts` (shared, build once) — the envelope `AnalysisPayload`
+  (`schema_version`, `language`, `max_level`, `k_limit?`, `application`) and the canonical types
+  `Application`, `Module`, `Node` (single interface, `kind` string, kind-specific fields optional),
+  `Edge` (`{ src, dst, kind?, var?, prov[], weight }`), `Span` (with `bytes` for slicing). Property
+  names match the v2 JSON keys so a parsed `analysis.json` satisfies the type. Language extras are
+  **additive optional fields** on `Node` + an open `tags`.
+- `src/models/cpg/views.ts` — thin view classes (`CallableView`, `TypeView`, `ModuleView`,
+  `CallsiteView`) exposing the old field names (`.code` = `module.source.slice(...bytes)`,
+  `.callSites` = `body` `call` nodes, `ModuleView.classes` = kind-filter over one `types`).
+- `src/models/<lang>/index.ts` — **aliases only**: `export type TSCallable = CallableView` etc.,
+  plus that language's added `Node` fields / `kind` strings. No per-language schema tree.
+- **Don't** mirror `src/models/java/`'s v1 per-language rich-edge split. Edges are identity-only
+  `{ src, dst }` with **id** endpoints; there is no `<L>CallEdge` / `<L>Callsite` type (a call is a
+  `body` `call` node; the list name is the edge type).
 - `index.ts` — re-export the public model names.
 These `<L>` types are where the language's **own** node kinds live: for each kind the analyzer
 added (recorded in its `SCHEMA_DECISIONS.md`; see `schema-contract.md`), add the matching field/type
@@ -55,7 +59,7 @@ typing means an extra JSON key is silently tolerated, so define every field you 
 - `<Lang>Analysis.ts` — the `<Lang>Analysis` class, mirroring `src/analysis/java/JavaAnalysis.ts`.
   Constructor takes `{ projectDir, analysisLevel, ... }`. Internally it builds the CLI args
   (the analyzer's documented CLI / `--help`), runs the binary (`spawnSync`/`bun`), reads the emitted `analysis.json`,
-  parses it into `<L>Application`, and exposes the read-only query vocabulary (see
+  parses it into the shared `Application` (v2 CPG model), and exposes the read-only query vocabulary (see
   **"The facade abstraction"** below).
 - **Binary resolution** — the TS SDK can't consume the `codeanalyzer-<lang>` PyPI wheel the Python
   SDK depends on, so it resolves the self-contained binary in this order: `analysisBackendPath` →
@@ -97,7 +101,7 @@ Mirror the existing Java branch in `CLDK.analysis(...)`:
 ### 5. Tests — `test/`
 - `<lang>Analysis.test.ts` — mirror the Java test. **Mock the backend** (stub the binary
   invocation to return a fixture `analysis.json`) so tests don't require the binary, then assert
-  the symbol table is non-empty and the call graph builds with no dangling endpoints.
+  the symbol table is non-empty and the call graph builds with no dangling endpoints (id-keyed).
 - Add a fixture `analysis.json` and any sample-project fixture alongside the existing Java
   fixtures, wired through `test/conftest.ts`.
 
@@ -118,7 +122,7 @@ yet — add them when the data exists.
 
 ## Definition of done for this surface
 - `CLDK.for("<lang>").analysis({ projectPath: <fixture> })` returns a facade whose symbol table is
-  non-empty and whose call graph has no dangling nodes (every edge endpoint is a real signature).
+  non-empty and whose call graph has no dangling nodes (every edge endpoint is a real node id).
 - `bun test` passes with the backend mocked.
 - All changes sit on the `add-<lang>-support` branch in `typescript-sdk`; summarize the diff for
   the user.

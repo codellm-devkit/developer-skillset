@@ -20,14 +20,28 @@ description: >-
 
 # CLDK SDK frontend
 
-Bind an existing `codeanalyzer-<lang>` analyzer into a CLDK **frontend SDK** so the language is
-reachable through the user-facing API. Today that means the **Python SDK** (`python-sdk`,
+Bind a `codeanalyzer-<lang>` analyzer into a CLDK **frontend SDK** so the language is reachable
+through the user-facing API. Today that means the **Python SDK** (`python-sdk`,
 `CLDK.<lang>(project_path=..., backend=...)`, with the legacy `CLDK(language="<lang>")
 .analysis(...)` as a compat shim); the **TypeScript SDK** (`typescript-sdk` =
 `@codellm-devkit/cldk`, `CLDK.for("<lang>").analysis({ projectPath })`) is wired the same way, and
 Rust/Go/Java SDKs will follow as they exist. This skill owns **one surface** — the SDK bindings.
 Building the analyzer and its `analysis.json` contract is the separate **codeanalyzer-backend**
 skill, whose output this skill consumes.
+
+**The analyzer now emits schema v2** (`codeanalyzer-backend/references/canonical-schema.md`): one
+additive node-tree + typed edges (a CPG), not the old per-language flat schema. So this skill has
+**two contexts**, and both are governed by one rule — **the public API does not move**:
+
+- **Add a new language** to the SDK — encode the v2 surface for it.
+- **Migrate an existing language's SDK to v2** — a **major SDK release** that remaps the model layer
+  to the shared CPG model while keeping every accessor's name and return type identical.
+
+The device that makes API-stability possible is the **two-layer model** (`schema-contract.md`):
+model the v2 tree **once** (`cldk/models/cpg/`: `Application`/`Module`/`Node`/`Edge`), and
+re-express the old `<L>Callable`/`<L>Class`/`<L>Module` return types as thin **views** exported
+under the same names. The facade and backend ABC keep their exact surface; only each method's
+*body* changes from "index the flat tree" to "walk/slice the v2 tree."
 
 The Python SDK now selects behavior along **two orthogonal axes**: the **language** (which
 `CLDK.<lang>()` factory method) and the **backend** (the *type* of the `backend=` config object —
@@ -66,10 +80,11 @@ If any input is missing, get it from the analyzer (run it on a fixture, read its
   The analyzer repo (`codeanalyzer-<lang>`) only needs to be runnable enough to emit a sample
   `analysis.json`; you are not modifying it here.
 - Read these reference files now:
-  - `references/schema-contract.md` — the invariant `analysis.json` contract the SDK `<L>` models
-    must satisfy (root keys, `Module→Class/Callable`, identity-only edges, snake_case, "validate
-    against `<Lang>Application`"). **Read first** — it's the contract; the full field-by-field
-    catalog is whatever the sample `analysis.json` actually contains.
+  - `references/schema-contract.md` — the **v2** contract the SDK models satisfy: the envelope root,
+    the `application → symbol_table{module} → types/functions → callable → body` tree, one shared
+    `Application`/`Module`/`Node`/`Edge` (not per-language `<L>` trees), id join keys, source-slice
+    text, and the **two-layer model** that keeps the public API identical. **Read first** — the full
+    field catalog is whatever the sample v2 `analysis.json` contains.
   - `references/sdk-facade-design-loop.md` — **the method** for *SDK Facade Design*: design the
     facade's query surface slot by slot by anchoring on the Java + Python + C facades and
     **bringing every divergence to the user as a decision**. Read before touching any SDK.
@@ -196,12 +211,17 @@ rules preserved), and the diff summary per repo.
   per-language ABC (`<Lang>AnalysisBackend`) that both the local and Neo4j backends implement — a
   `test_<lang>_backend_contract.py` enforces it. Design the facade vocabulary once; declare it on
   the backend ABC so both backends stay in lockstep.
-- **Models must validate against a real sample.** Build the `<L>` models against the actual
-  `analysis.json` the analyzer emits, field-for-field (Pydantic silently drops unknown keys — define
-  every field you intend to read). Validation against the `<Lang>Application` model is the
-  definition of done, not "looks right".
+- **Model once; validate against a real v2 sample.** Build the shared `cldk/models/cpg/`
+  `Application`/`Node`/`Edge` against the actual v2 `analysis.json` (Pydantic drops unknown keys —
+  define every field you read; add language kinds as additive optional `Node` fields). Validation
+  against the **envelope** `AnalysisPayload` (whose `.application` is the tree) is the definition of
+  done, not "looks right".
+- **Preserve the public API — the migration's headline guarantee.** Every accessor keeps its name
+  and return type; the `<L>Callable`/`<L>Class`/`<L>Module` return types are the shared **views**.
+  A `test_<lang>_public_api.py` asserting the surface is unchanged is part of done.
 - **Don't fake the call graph.** The derived `get_call_graph()` view must have no dangling nodes —
-  every edge endpoint is a real callable signature in the symbol table.
+  every edge endpoint is a real node **id** in the tree (`signature` is a node attribute; the nx
+  node key is now the `can://` id — a deliberate, documented change).
 - **Branch + lockstep.** Edit each SDK repo only on an `add-<lang>-support` branch; keep the
   analyzer-version pin identical across every SDK and equal to the backend's published release.
 - **Scope discipline.** This skill touches SDK repos only. Building or releasing the analyzer is

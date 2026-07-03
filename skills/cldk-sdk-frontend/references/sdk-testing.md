@@ -35,34 +35,39 @@ pre-built `<Lang>Application` from a fixture JSON. Tests never invoke the binary
 
 ```python
 @pytest.fixture
-def fake_app():
-    return <Lang>Application(**json.loads(FIXTURE_JSON))
+def fake_payload():
+    return AnalysisPayload(**json.loads(FIXTURE_JSON))   # v2 envelope; .application is the tree
 
 @pytest.fixture
-def analysis(tmp_path, monkeypatch, fake_app):
+def analysis(tmp_path, monkeypatch, fake_payload):
     monkeypatch.setattr(
         "<Lang>Codeanalyzer",
         "_run_and_parse",
-        lambda *a, **kw: fake_app,
+        lambda *a, **kw: fake_payload,
     )
     return <Lang>Analysis(project_dir=tmp_path, ...)
 
-def test_get_symbol_table_non_empty(analysis, fake_app):
-    assert analysis.get_symbol_table() == fake_app.symbol_table
+def test_get_symbol_table_non_empty(analysis, fake_payload):
+    assert analysis.get_symbol_table() == fake_payload.application.symbol_table
 ```
 
 **Minimum mocked test coverage:**
 
 - `source_code` mode raises `CldkInitializationException` (if not supported for this
   language).
-- `get_symbol_table()` returns the expected dict.
-- `get_file("<known_path>")` returns the correct `<Lang>File`.
+- **The public API is unchanged** — assert every accessor keeps its name and *return type* (the
+  `<L>*` views), since v2 remaps only the substrate.
+- `get_symbol_table()` returns the expected dict (keys = relative paths, unchanged from v1).
+- `get_method_body(sig)` returns the source **slice** (`module.source[span.bytes]`), and
+  `get_call_sites(sig)` returns the callable's `body` `call` nodes (an L1 accessor).
 - `get_all_types()` / `get_all_callables()` iterate across files correctly.
-- `get_call_graph()` returns a `nx.DiGraph` with the expected node and edge counts.
-- `get_callers(sig)` / `get_callees(sig)` return correct subsets.
-- Pydantic round-trip: `<Lang>Application(**json.loads(app.model_dump_json()))` succeeds.
-- Language-specific alias properties (e.g. `GoFile.types`, `GoFile.package_name`) return
-  expected values.
+- `get_call_graph()` returns a `nx.DiGraph` with the expected node/edge counts — assert nodes are
+  **`can://` ids** with `signature` as a node attribute (the deliberate node-key change).
+- `get_callers(sig)` / `get_callees(sig)` return correct subsets (signature resolved to id).
+- **Null-collection coercion** — pass a fixture with `null` list fields; `_NullSafeBase` loads it.
+- Pydantic round-trip: `AnalysisPayload(**json.loads(payload.model_dump_json()))` succeeds (note
+  the JSON keys are the v2 envelope).
+- Language-specific view properties (e.g. `GoModule.types`, `.package`) return expected values.
 - Null JSON fields coerce correctly — pass a fixture JSON with `null` list/dict fields and
   confirm the model loads without error (tests the `_NullSafeBase` guard — see
   `python-sdk-wiring.md § Common pitfalls`).
@@ -104,15 +109,18 @@ def _analysis(tmp_path, level=AnalysisLevel.symbol_table):
 
 **Minimum E2E test coverage:**
 
-- All expected source files appear as keys in `symbol_table`.
+- All expected source files appear as keys in `application.symbol_table`.
 - No key is an absolute path or starts with `..`.
-- `<Lang>Application(**json.load(open(tmp_path / "analysis.json")))` succeeds (Pydantic
-  round-trip on the real output file).
-- Every language-specific schema field exercised by the fixture has an E2E assertion with a
+- `AnalysisPayload(**json.load(open(tmp_path / "analysis.json")))` succeeds (round-trip on the
+  real v2 output file — the envelope, `.application` the tree); `payload.max_level` reads the level.
+- Every language-specific schema field/`kind` exercised by the fixture has an E2E assertion with a
   specific expected value — not just "non-empty".
-- Named expected call-graph edge is present (level-2 run).
-- Cross-package edge is present (level-2 run).
-- No dangling call-graph nodes.
+- Named expected call-graph edge is present at `-a 2` (endpoints are `can://` ids).
+- Cross-package edge is present at `-a 2`.
+- **Level matrix**: assert `-a 1` has `body` `call` nodes but no `cfg`/`ddg`; `-a 3` populates
+  `cfg`/`cdg`/`ddg` on a callable; `-a 4` populates `param_in`/`param_out` — when the analyzer
+  implements those levels. Also assert the **monotone superset** across levels.
+- No dangling edges (every `src`/`dst` resolves to a node in the tree).
 - Cache idempotency (SDK-level skip): first run with `eager=True` seeds the cache; second run
   with `eager=False` does not rewrite `analysis.json` (assert `st_mtime` unchanged after
   `time.sleep(0.05)`). This exercises the facade's `_check_existing_analysis()` skip, the
@@ -123,9 +131,12 @@ def _analysis(tmp_path, level=AnalysisLevel.symbol_table):
 ## 4. Definition of done (SDK surface)
 
 - [ ] Mocked SDK tests pass under `pytest` (backend patched).
+- [ ] **Public-API-stability test**: every pre-migration accessor keeps its name + return type (the
+  `<L>*` views over the shared model) — the migration's headline guarantee.
 - [ ] `CLDK.<lang>(project_path=<fixture>).get_symbol_table()` is non-empty when run with the
   binary on PATH (and the legacy `CLDK(language="<lang>").analysis(...)` shim still works).
-- [ ] `get_call_graph()` returns a NetworkX DiGraph with no dangling nodes.
+- [ ] `get_call_graph()` returns a NetworkX DiGraph with no dangling nodes (endpoints are `can://`
+  ids; `signature` is a node attribute).
 - [ ] E2E tests exist and skip cleanly when the binary is absent.
 - [ ] `pyproject.toml [tool.backend-versions]` is pinned to the released version.
 - [ ] All changes are on the `add-<lang>-support` branch; the tree is clean.

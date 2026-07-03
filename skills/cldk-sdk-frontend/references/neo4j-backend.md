@@ -29,7 +29,7 @@ local backend uses. Concretely (mirror `cldk/analysis/java/neo4j/`):
 <lang>/neo4j/
   config.py            # small config plumbing
   neo4j_backend.py     # <Lang>Neo4jBackend(<Lang>AnalysisBackend)
-  reconstruct.py       # graph rows → the SAME <L>* model dicts the local backend parses
+  reconstruct.py       # graph rows → the shared v2 Application (cldk/models/cpg/) the local backend queries
 ```
 
 - **`neo4j_backend.py`** — constructor takes `uri`, `username`, `password`, `database`,
@@ -43,17 +43,35 @@ local backend uses. Concretely (mirror `cldk/analysis/java/neo4j/`):
           "`pip install neo4j` (or `pip install cldk[neo4j]`)."
       ) from e
   ```
-  `application_name` is **required** (the queries scope every match to
-  `(:<Lang>Application {name: $app})`); it must equal the `--app-name` the graph was loaded with.
-  On construction it bulk-loads the unit keys, reconstructs the `<L>Application`, and derives the
-  NetworkX call graph — then every ABC method reads from that reconstructed model, identical to
-  the local backend.
+  `application_name` is **required** (the queries scope every match to `(:Application {name: $app})`,
+  now `can://<lang>/<app>`); it must equal the `--app-name` the graph was loaded with. On
+  construction it bulk-loads the modules, reconstructs the shared **`Application`** (v2 CPG model),
+  and derives the NetworkX call graph — then every ABC method reads from that reconstructed model,
+  identical to the local backend.
 
-- **`reconstruct.py`** — a set of pure `props → dict` builders (one per node family: `parameter`,
-  `field`, `variable`, `callable_`, `type_`, `compilation_unit`, `callsite`, `call_edge`, plus
-  language-native kinds) that turn Cypher result rows back into the exact shape `<L>Application`
-  validates. This is the inverse of the analyzer's `project()` — keep the two in lockstep with
-  the shared `schema.neo4j.json` version.
+- **`reconstruct.py` (v2)** — the graph is a **near-identity projection** of the tree, so
+  reconstruction is the **inverse of the analyzer's `project()`**: MATCH the containment edges and
+  re-nest them. Node labels are the v2 **kinds** (`Module`, the `Symbol` type-kinds `Class`/`Struct`/
+  `Interface`/…, `Callable`, and the body kinds `Statement`/`Call`/`Entry`/`FormalIn`/…); the
+  `can://` **`id` is the merge key** (one `(:Node {id})` MATCH regardless of kind — the graph-side
+  reflection of the single `Node` model). So the builder collapses from many per-family functions to
+  **one `node(props, labels)` keyed on `kind`** plus a handful of edge builders. Rebuild each layer
+  onto its correct owner:
+  - **Containment** (`HAS_MODULE`/`DECLARES`/`HAS_CALLABLE`/`HAS_FIELD`/`HAS_CFG_NODE`) → re-nest into
+    `symbol_table{}` → `types{}`/`functions{}` → `callables{}`/`fields{}` → `body{}`.
+  - **Overlays** onto their scope: `CALLS` → `application.call_graph`; `CFG`/`CDG`/`DDG`/`SUMMARY` →
+    the callable's lists (grouped by whichever callable `HAS_CFG_NODE` the src); `PARAM_IN`/
+    `PARAM_OUT` → `application.param_in`/`param_out`. Edge props (`weight`, `prov`, `kind`, `var`)
+    map straight across.
+  There is **no `callsite`/`call_edge` node family** (v1) — a call is a `Call` body node; the call
+  graph is a `CALLS` relationship. Keep `reconstruct.py` in lockstep with the analyzer's
+  `neo4j-projection.md` and the shared `schema.neo4j.json` version.
+
+- **Body-text lossiness (document it).** The v2 `.code`/`get_method_body()` is a slice of
+  `module.source`. If the graph didn't project `source` (a size choice), the reconstructed model
+  has empty body text — a gap the local backend never has. This is the canonical example of "parity
+  = same model **modulo documented lossiness**"; state it in the backend's docstring and the parity
+  tests.
 
 ## Backend selection (in the facade `__init__`)
 

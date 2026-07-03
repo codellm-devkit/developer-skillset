@@ -120,16 +120,18 @@ Encode the user's decisions into **both** SDK facades in the same change — the
 `<Lang>Analysis` and the TypeScript `<Lang>Analysis` — so they never drift. Reproduce Tier A
 verbatim in both; name the leaf accessors exactly as decided; keep the constructor params and
 guards identical in spirit (Python `snake_case`, TS `camelCase`). The facade stays a thin,
-read-only, lazily-evaluated query layer over the canonical `Application` (method catalog and the
-two-layer facade/wrapper shape: `python-sdk-wiring.md` § "The facade abstraction").
+read-only, lazily-evaluated query layer over the canonical v2 `Application` node-tree — surfaced
+through the per-language **views** (`schema-contract.md` § "The two-layer model") so the accessor
+return types keep their old names (method catalog and the facade/wrapper shape:
+`python-sdk-wiring.md` § "The facade abstraction").
 
 ## Keep this distinct from the schema axis
 *Schema Design* decided what data the analyzer **emits**; this loop decides how the SDK **exposes**
 that data to a developer. They co-evolve (a new `<L>` node kind usually earns a new accessor) but
 they are different decisions: a node can exist in the schema without a dedicated facade accessor,
 and a facade accessor can be a derived view (`get_call_graph`, `get_class_hierarchy`) over data
-that is just edges/`base_classes` in the schema. Don't let facade-naming questions reshape the
-schema, or vice versa.
+that is just edges / type-containment (`call_graph` edges, a type node's `base_types`) in the
+schema. Don't let facade-naming questions reshape the schema, or vice versa.
 
 ## Why anchor on *multiple* references
 Java alone biases you toward a class-centric, annotation-based, name-addressed world. Python shows
