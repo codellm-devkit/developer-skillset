@@ -271,7 +271,7 @@
   .branch { display: flex; gap: 12px; align-items: baseline; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 10px 14px; font-size: 13.5px; }
   .branch code { white-space: nowrap; }
   .pill { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
-  .pill.merged { color: var(--l1); background: var(--l1-soft); }
+  .pill.merged, .pill.decided { color: var(--l1); background: var(--l1-soft); }
   .pill.draft { color: var(--l3); background: var(--l3-soft); }
   .pill.open { color: var(--l4); background: var(--l4-soft); }
   .branch .what { color: var(--muted); }
@@ -542,7 +542,7 @@
       <div class="branch"><span class="pill merged">on main</span><code>590d946</code><span class="what">The L1&ndash;L4 ladder is landed as backend references (dataflow-graphs, -construction, -substrate-menu, neo4j-projection); canonical-schema.md there is still v1 — a hybrid state.</span></div>
       <div class="branch"><span class="pill draft">unmerged</span><code>feat/schema-v2-rebuild</code><span class="what">This document's source: the v2 keystone (additive CPG model) + migration guide; backend references reconciled.</span></div>
       <div class="branch"><span class="pill draft">unmerged</span><code>feat/frontend-schema-v2</code><span class="what">SDK side rebuilt on the two-layer model (schema-contract, wiring, facade loop); SDK v2 migration flagged as next.</span></div>
-      <div class="branch"><span class="pill open">open question</span><code>design/graph-provider-taint-frontend</code><span class="what">Should the analyzer be a pure graph provider, with taint/slicing moving to the frontend SDK? Reshapes L4's client-query surface.</span></div>
+      <div class="branch"><span class="pill decided">decided</span><code>design/graph-provider-taint-frontend</code><span class="what">Decided: the analyzer is a <b>pure graph provider</b> — slicing and taint are SDK-side reachability queries over the emitted graph; policy-agnostic <code>SUMMARY</code> edges stay analyzer-side. Needs a rebase over the L3/L4 split before merge.</span></div>
     </div>
   </section>
 
