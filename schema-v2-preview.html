@@ -1,0 +1,734 @@
+<title>CLDK Analysis Schema v2</title>
+<style>
+  :root {
+    --bg: #f5f6f4;
+    --surface: #ffffff;
+    --inset: #eef0ec;
+    --border: #dde1da;
+    --border-soft: #e7eae3;
+    --ink: #21262b;
+    --muted: #5b6670;
+    --faint: #8a949c;
+    --l1: #12876f;
+    --l2: #2f6bd8;
+    --l3: #9a6317;
+    --l4: #be3a7a;
+    --l1-soft: #12876f22;
+    --l2-soft: #2f6bd822;
+    --l3-soft: #9a631722;
+    --l4-soft: #be3a7a22;
+    --e-call: #2f6bd8;
+    --e-cfg: #d98a24;
+    --e-cdg: #d25566;
+    --e-ddg: #12967e;
+    --e-sum: #7d53d6;
+    --e-pio: #be3a7a;
+    --code-bg: #1d2226;
+    --code-ink: #d7dde2;
+    --shadow: 0 1px 2px rgba(24,30,36,.05), 0 4px 14px rgba(24,30,36,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121517;
+      --surface: #1a1f23;
+      --inset: #14181b;
+      --border: #2b3238;
+      --border-soft: #242b31;
+      --ink: #e7eaec;
+      --muted: #98a2aa;
+      --faint: #6b757d;
+      --l1: #2cc1a0;
+      --l2: #6e9bef;
+      --l3: #dfa244;
+      --l4: #e56ca8;
+      --l1-soft: #2cc1a026;
+      --l2-soft: #6e9bef26;
+      --l3-soft: #dfa24426;
+      --l4-soft: #e56ca826;
+      --e-call: #6e9bef;
+      --e-cfg: #e0a044;
+      --e-cdg: #e07484;
+      --e-ddg: #35bda1;
+      --e-sum: #a184e6;
+      --e-pio: #e56ca8;
+      --code-bg: #14181b;
+      --code-ink: #cdd5db;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121517; --surface: #1a1f23; --inset: #14181b; --border: #2b3238;
+    --border-soft: #242b31; --ink: #e7eaec; --muted: #98a2aa; --faint: #6b757d;
+    --l1: #2cc1a0; --l2: #6e9bef; --l3: #dfa244; --l4: #e56ca8;
+    --l1-soft: #2cc1a026; --l2-soft: #6e9bef26; --l3-soft: #dfa24426; --l4-soft: #e56ca826;
+    --e-call: #6e9bef; --e-cfg: #e0a044; --e-cdg: #e07484; --e-ddg: #35bda1;
+    --e-sum: #a184e6; --e-pio: #e56ca8;
+    --code-bg: #14181b; --code-ink: #cdd5db;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+  }
+  :root[data-theme="light"] {
+    --bg: #f5f6f4; --surface: #ffffff; --inset: #eef0ec; --border: #dde1da;
+    --border-soft: #e7eae3; --ink: #21262b; --muted: #5b6670; --faint: #8a949c;
+    --l1: #12876f; --l2: #2f6bd8; --l3: #9a6317; --l4: #be3a7a;
+    --l1-soft: #12876f22; --l2-soft: #2f6bd822; --l3-soft: #9a631722; --l4-soft: #be3a7a22;
+    --e-call: #2f6bd8; --e-cfg: #d98a24; --e-cdg: #d25566; --e-ddg: #12967e;
+    --e-sum: #7d53d6; --e-pio: #be3a7a;
+    --code-bg: #1d2226; --code-ink: #d7dde2;
+    --shadow: 0 1px 2px rgba(24,30,36,.05), 0 4px 14px rgba(24,30,36,.05);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Avenir Next", Seravek, "Segoe UI", system-ui, sans-serif;
+    font-size: 15.5px;
+    line-height: 1.55;
+  }
+  .mono, code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  code { font-size: .88em; background: var(--inset); border: 1px solid var(--border-soft); border-radius: 4px; padding: .08em .35em; }
+  pre code { background: none; border: none; padding: 0; font-size: inherit; }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 24px 72px; }
+  .prose { max-width: 70ch; }
+
+  .eyebrow {
+    font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600;
+  }
+  header.top { margin-bottom: 34px; }
+  h1 {
+    font-size: clamp(27px, 4.4vw, 38px); font-weight: 700; letter-spacing: -.015em;
+    margin: 8px 0 10px; text-wrap: balance;
+  }
+  .thesis {
+    max-width: 62ch; margin: 0; padding: 12px 18px;
+    border-left: 3px solid var(--l4); background: var(--surface);
+    border-radius: 0 6px 6px 0; box-shadow: var(--shadow);
+    font-size: 16.5px; line-height: 1.5;
+  }
+  .thesis em { font-style: normal; font-weight: 600; }
+  .statusline { margin-top: 14px; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .statusline b { color: var(--ink); font-weight: 600; }
+
+  h2 { font-size: 21px; letter-spacing: -.01em; margin: 54px 0 6px; text-wrap: balance; }
+  h2 + .lede { margin: 0 0 18px; color: var(--muted); max-width: 74ch; }
+  section > .prose p { margin: 10px 0; }
+
+  /* ---------- level + family tokens ---------- */
+  .lv { display: inline-flex; align-items: center; justify-content: center;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10.5px; font-weight: 700;
+    border-radius: 4px; padding: 1px 5px; line-height: 1.5; }
+  .lv1 { color: var(--l1); background: var(--l1-soft); }
+  .lv2 { color: var(--l2); background: var(--l2-soft); }
+  .lv3 { color: var(--l3); background: var(--l3-soft); }
+  .lv4 { color: var(--l4); background: var(--l4-soft); }
+
+  /* ---------- diagram ---------- */
+  .panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+    padding: 14px 16px; border-bottom: 1px solid var(--border-soft);
+  }
+  .stepper { display: flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .stepper button {
+    appearance: none; border: none; background: transparent; color: var(--muted);
+    font: inherit; font-weight: 600; font-size: 13.5px; padding: 7px 15px; cursor: pointer;
+    border-right: 1px solid var(--border);
+  }
+  .stepper button:last-child { border-right: none; }
+  .stepper button:focus-visible { outline: 2px solid var(--l2); outline-offset: -2px; }
+  .stepper button[aria-pressed="true"] { color: #fff; }
+  .stepper button[data-l="1"][aria-pressed="true"] { background: var(--l1); }
+  .stepper button[data-l="2"][aria-pressed="true"] { background: var(--l2); }
+  .stepper button[data-l="3"][aria-pressed="true"] { background: var(--l3); }
+  .stepper button[data-l="4"][aria-pressed="true"] { background: var(--l4); }
+  .flag { font-size: 12.5px; color: var(--muted); }
+  .flag code { font-weight: 600; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+  .chip {
+    appearance: none; display: inline-flex; align-items: center; gap: 6px;
+    font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    color: var(--ink); background: var(--inset); border: 1px solid var(--border);
+    border-radius: 999px; padding: 3px 10px 3px 8px;
+  }
+  .chip .swatch { width: 14px; height: 0; border-top: 2.5px solid; border-radius: 2px; }
+  .chip[aria-pressed="false"] { opacity: .45; }
+  .chip:disabled { opacity: .28; cursor: default; }
+  .chip:focus-visible { outline: 2px solid var(--l2); outline-offset: 1px; }
+  .chip .fam { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-weight: 600; }
+
+  .delta {
+    padding: 10px 16px; font-size: 13.5px; color: var(--muted);
+    border-bottom: 1px solid var(--border-soft); background: var(--inset);
+  }
+  .delta b { color: var(--ink); }
+
+  .scroller { overflow-x: auto; }
+  .stage { position: relative; min-width: 860px; padding: 26px 26px 30px; }
+  .stage svg.overlay { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+  .stage svg.overlay path { fill: none; stroke-width: 1.7; }
+  .stage svg.overlay text {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px;
+    fill: var(--muted); paint-order: stroke; stroke: var(--surface); stroke-width: 3px;
+  }
+  .ec-call { stroke: var(--e-call); } .em-call { fill: var(--e-call); }
+  .ec-cfg  { stroke: var(--e-cfg);  } .em-cfg  { fill: var(--e-cfg); }
+  .ec-cdg  { stroke: var(--e-cdg);  } .em-cdg  { fill: var(--e-cdg); }
+  .ec-ddg  { stroke: var(--e-ddg);  } .em-ddg  { fill: var(--e-ddg); }
+  .ec-summary { stroke: var(--e-sum); } .em-summary { fill: var(--e-sum); }
+  .ec-param_in, .ec-param_out { stroke: var(--e-pio); } .em-param_in, .em-param_out { fill: var(--e-pio); }
+  .dashed { stroke-dasharray: 5 4; }
+
+  .cols { position: relative; display: flex; gap: 110px; align-items: flex-start; }
+  .col { flex: 1 1 0; min-width: 0; }
+  .col.callee { max-width: 300px; margin-top: 46px; }
+
+  .node {
+    border: 1px solid var(--border); border-radius: 7px; background: var(--surface);
+    padding: 10px 12px 12px; margin-top: 10px;
+  }
+  .node.shell { background: var(--inset); }
+  .nhead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .kind { font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+  .nname { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; font-weight: 600; }
+  .nid { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; color: var(--faint);
+    margin-top: 2px; overflow-wrap: anywhere; }
+  .mapkey { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; color: var(--muted); margin: 10px 0 -4px; }
+  .srcnote { font-size: 11.5px; color: var(--faint); margin-top: 4px; }
+  .srcnote code { font-size: 11px; }
+
+  .body-list { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+  .stmt {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    border: 1px solid var(--border); border-radius: 5px; background: var(--surface);
+    padding: 5px 9px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px;
+  }
+  .stmt .skind { color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; }
+  .stmt .pos { font-weight: 700; }
+  .stmt .txt { color: var(--muted); font-size: 11.5px; }
+  .stmt.synth { border-style: dashed; background: transparent; }
+  .stmt.synth .pos { color: var(--l4); }
+  .stmt.synth.l3s .pos { color: var(--muted); }
+  .callrow { border-color: color-mix(in srgb, var(--l2) 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 3px; }
+  .callrow .toprow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .calleeline { font-size: 11px; color: var(--muted); }
+  .calleeline .null { color: var(--l3); font-weight: 700; }
+  .calleeline .res { color: var(--l2); overflow-wrap: anywhere; }
+  .actuals { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
+  .actuals .stmt { padding: 3px 7px; font-size: 11px; }
+
+  .just { animation: flash 1s ease-out 1; }
+  @keyframes flash { 0% { background-color: var(--l4-soft); } 100% { background-color: transparent; } }
+  @media (prefers-reduced-motion: reduce) { .just { animation: none; } }
+
+  [hidden] { display: none !important; }
+
+  /* ---------- ladder cards ---------- */
+  .ladder { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 16px; }
+  .lcard { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 15px; box-shadow: var(--shadow); border-top: 3px solid; }
+  .lcard.c1 { border-top-color: var(--l1); } .lcard.c2 { border-top-color: var(--l2); }
+  .lcard.c3 { border-top-color: var(--l3); } .lcard.c4 { border-top-color: var(--l4); }
+  .lcard h3 { margin: 0 0 2px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .lcard .cost { font-size: 11.5px; color: var(--faint); margin-bottom: 8px; }
+  .lcard dl { margin: 0; font-size: 13px; }
+  .lcard dt { font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); font-weight: 700; margin-top: 8px; }
+  .lcard dd { margin: 2px 0 0; }
+  .lcard dd code { font-size: .85em; }
+
+  /* ---------- tables ---------- */
+  .tblwrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); margin-top: 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 640px; }
+  th { text-align: left; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--inset); }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td .swatch { display: inline-block; width: 16px; border-top: 3px solid; border-radius: 2px; vertical-align: middle; margin-right: 7px; }
+  td.famname { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-weight: 600; white-space: nowrap; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- identity / projections ---------- */
+  .duo { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; box-shadow: var(--shadow); }
+  .card h3 { margin: 0 0 4px; font-size: 15.5px; }
+  .card .sub { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+  .card p { font-size: 13.5px; margin: 8px 0 0; }
+  .idblock { background: var(--code-bg); color: var(--code-ink); border-radius: 6px; padding: 10px 13px; font-size: 12px; line-height: 1.7; overflow-x: auto; }
+  .idblock .dim { opacity: .55; }
+
+  /* ---------- rules list ---------- */
+  ul.rules { padding-left: 0; list-style: none; max-width: 76ch; }
+  ul.rules li { padding: 9px 0 9px 16px; border-left: 2px solid var(--border); margin: 6px 0; font-size: 14px; }
+  ul.rules li b { font-weight: 650; }
+
+  /* ---------- status ---------- */
+  .branches { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; max-width: 78ch; }
+  .branch { display: flex; gap: 12px; align-items: baseline; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 10px 14px; font-size: 13.5px; }
+  .branch code { white-space: nowrap; }
+  .pill { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+  .pill.merged { color: var(--l1); background: var(--l1-soft); }
+  .pill.draft { color: var(--l3); background: var(--l3-soft); }
+  .pill.open { color: var(--l4); background: var(--l4-soft); }
+  .branch .what { color: var(--muted); }
+
+  details.example { margin-top: 18px; }
+  details.example summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--muted); }
+  details.example pre { background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 16px 18px; overflow-x: auto; font-size: 12px; line-height: 1.65; }
+  .j1 { color: #7fd6b8; } .j2 { color: #93b8f5; } .j3 { color: #ecbf77; } .j4 { color: #f096c3; }
+  .jc { opacity: .5; }
+
+  footer { margin-top: 60px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--faint); }
+  footer code { font-size: 11px; }
+
+  @media (max-width: 720px) {
+    .chips { margin-left: 0; }
+    .cols { gap: 80px; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">codeanalyzer contract &middot; schema_version 2.0.0 &middot; draft on feat/schema-v2-rebuild</div>
+    <h1>The CLDK analysis schema, v2</h1>
+    <p class="thesis">Codeanalyzer is an <em>additive analysis paradigm</em>: each analysis level is the same tree grown one layer deeper, plus one edge family over the new layer. One structure — a containment tree with typed edge overlays — <em>is</em> a Code Property Graph. Symbol table, call graph, CFG, PDG, SDG, taint: all projections of it.</p>
+    <div class="statusline">
+      <span><b>One atom:</b> a scale-free node — id · kind · span · children · edges</span>
+      <span><b>Two relations:</b> containment (single-parent) + typed edges (many)</span>
+      <span><b>Two projections:</b> analysis.json + Neo4j</span>
+    </div>
+  </header>
+
+  <!-- ================= DIAGRAM ================= -->
+  <section>
+    <h2>The tree, grown level by level</h2>
+    <p class="lede">The worked example from the spec — <code>Hasher.Hash</code> calling <code>fnv.New64</code> in a Go app. Step through the levels: every step only <b>adds</b> (or refines <code>null&nbsp;&rarr;&nbsp;id</code>); nothing is ever rewritten. Toggle edge families to isolate an overlay.</p>
+
+    <div class="panel">
+      <div class="controls">
+        <div class="stepper" role="group" aria-label="Analysis level">
+          <button data-l="1" aria-pressed="true">L1</button>
+          <button data-l="2" aria-pressed="false">L2</button>
+          <button data-l="3" aria-pressed="false">L3</button>
+          <button data-l="4" aria-pressed="false">L4</button>
+        </div>
+        <span class="flag" id="flag"><code>-a 1</code> &middot; parser + resolver</span>
+        <div class="chips" id="chips" role="group" aria-label="Edge families"></div>
+      </div>
+      <div class="delta" id="delta"></div>
+      <div class="scroller">
+        <div class="stage" id="stage">
+          <div class="cols">
+
+            <!-- caller column -->
+            <div class="col caller">
+              <div class="node shell">
+                <div class="nhead"><span class="kind">application</span><span class="nname">myapp</span><span class="lv lv1">L1</span></div>
+                <div class="nid">can://go/myapp</div>
+
+                <div class="mapkey">symbol_table { "src/util.go": &hellip; }</div>
+                <div class="node">
+                  <div class="nhead"><span class="kind">module</span><span class="nname">src/util.go</span><span class="lv lv1">L1</span></div>
+                  <div class="srcnote">source: one blob per module — every node's text is a <code>span.bytes</code> slice of it</div>
+
+                  <div class="mapkey">types { "Hasher": &hellip; }</div>
+                  <div class="node">
+                    <div class="nhead"><span class="kind">struct</span><span class="nname">Hasher</span><span class="lv lv1">L1</span></div>
+
+                    <div class="mapkey">callables { "Hash(string)uint64": &hellip; }</div>
+                    <div class="node" id="n-hash">
+                      <div class="nhead"><span class="kind">method</span><span class="nname">Hash(string)uint64</span><span class="lv lv1">L1</span></div>
+                      <div class="nid">can://go/myapp/src/util.go/Hasher/Hash(string)uint64</div>
+
+                      <div class="mapkey">body { &hellip; }</div>
+                      <div class="body-list">
+                        <div class="stmt synth l3s" id="s-entry" data-min="3"><span class="pos">@entry</span><span class="skind">entry</span><span class="lv lv3">L3</span></div>
+                        <div class="stmt synth" id="s-fin" data-min="4"><span class="pos">@formal_in:0</span><span class="skind">formal_in</span><span class="txt">of: s</span><span class="lv lv4">L4</span></div>
+                        <div class="stmt" id="s-15" data-min="3"><span class="pos">15:2</span><span class="skind">statement</span><span class="txt">h := fnv.New64()</span><span class="lv lv3">L3</span></div>
+                        <div class="stmt callrow" id="s-16">
+                          <div class="toprow"><span class="pos">16:2</span><span class="skind">call</span><span class="txt">h.Write([]byte(s))</span><span class="lv lv1">L1</span></div>
+                          <div class="calleeline" data-max="1">callee: <span class="null">null</span> <span class="txt">&larr; unresolved at L1</span></div>
+                          <div class="calleeline" data-min="2">callee: <span class="res">can://go/myapp/src/fnv.go/New64()</span> <span class="lv lv2">L2</span></div>
+                          <div class="actuals">
+                            <div class="stmt synth" id="c-ain" data-min="4"><span class="pos">16:2/actual_in:0</span><span class="skind">actual_in</span><span class="lv lv4">L4</span></div>
+                            <div class="stmt synth" id="c-aout" data-min="4"><span class="pos">16:2/actual_out</span><span class="skind">actual_out</span><span class="lv lv4">L4</span></div>
+                          </div>
+                        </div>
+                        <div class="stmt" id="s-17" data-min="3"><span class="pos">17:2</span><span class="skind">return</span><span class="txt">return h.Sum64()</span><span class="lv lv3">L3</span></div>
+                        <div class="stmt synth" id="s-fout" data-min="4"><span class="pos">@formal_out</span><span class="skind">formal_out</span><span class="txt">of: $ret</span><span class="lv lv4">L4</span></div>
+                        <div class="stmt synth l3s" id="s-exit" data-min="3"><span class="pos">@exit</span><span class="skind">exit</span><span class="lv lv3">L3</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mapkey" data-min="2">call_graph [ &hellip; ] <span class="lv lv2">L2</span> &nbsp; <span class="srcnote" style="display:inline">callable &rarr; callable, at application scope</span></div>
+                <div class="mapkey" data-min="4">param_in [ &hellip; ] &middot; param_out [ &hellip; ] <span class="lv lv4">L4</span></div>
+              </div>
+            </div>
+
+            <!-- callee column -->
+            <div class="col callee">
+              <div class="node">
+                <div class="nhead"><span class="kind">module</span><span class="nname">src/fnv.go</span><span class="lv lv1">L1</span></div>
+                <div class="mapkey">functions { "New64()": &hellip; }</div>
+                <div class="node" id="n-new64">
+                  <div class="nhead"><span class="kind">function</span><span class="nname">New64()</span><span class="lv lv1">L1</span></div>
+                  <div class="nid">can://go/myapp/src/fnv.go/New64()</div>
+                  <div class="body-list">
+                    <div class="stmt synth" id="f-nin" data-min="4"><span class="pos">@formal_in:0</span><span class="skind">formal_in</span><span class="lv lv4">L4</span></div>
+                    <div class="stmt synth" id="f-nout" data-min="4"><span class="pos">@formal_out</span><span class="skind">formal_out</span><span class="txt">of: $ret</span><span class="lv lv4">L4</span></div>
+                    <div class="srcnote" data-min="3">body { &hellip; } — its own CFG/PDG, per-callable parallel</div>
+                  </div>
+                </div>
+              </div>
+              <p class="srcnote" style="margin-top:12px">Intra-callable edges (<span class="mono">cfg&middot;cdg&middot;ddg&middot;summary</span>) hang on the <b>callable</b>; cross-callable edges (<span class="mono">call_graph&middot;param_in&middot;param_out</span>) hang on the <b>application</b> — always the lowest common ancestor of their endpoints.</p>
+            </div>
+
+          </div>
+          <svg class="overlay" id="overlay" aria-hidden="true"></svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= LADDER ================= -->
+  <section>
+    <h2>The level ladder</h2>
+    <p class="lede">Depth grows only at L1 and L3; L2 is pure refinement + one edge family; L4 adds synthetic vertices + cross edges. <code>L1 &sube; L2 &sube; L3 &sube; L4</code>, superset modulo null-refinement — a CI-checkable gate. Framework enrichment (Joern/WALA) is an <b>orthogonal axis</b>, provenance-merged into existing families, never a level.</p>
+    <div class="ladder">
+      <div class="lcard c1">
+        <h3><span class="lv lv1">L1</span> Parse + resolve</h3>
+        <div class="cost">cheap &middot; parser + resolver &middot; <code>-a 1</code></div>
+        <dl>
+          <dt>Grows (nodes)</dt><dd>Tree to <b>callable</b> depth; <code>body</code> holds just the <code>call</code> nodes — <code>callee: null</code>. <code>get_call_sites</code> is already an L1 accessor.</dd>
+          <dt>Adds (edges)</dt><dd>—</dd>
+        </dl>
+      </div>
+      <div class="lcard c2">
+        <h3><span class="lv lv2">L2</span> Link</h3>
+        <div class="cost">cheap &middot; resolver &middot; <code>-a 2</code></div>
+        <dl>
+          <dt>Grows (nodes)</dt><dd><code>callee</code> backfilled on every call node: <code>null &rarr; id</code>. The only sanctioned refinement.</dd>
+          <dt>Adds (edges)</dt><dd><code>call_graph</code> (callable &rarr; callable)</dd>
+        </dl>
+      </div>
+      <div class="lcard c3">
+        <h3><span class="lv lv3">L3</span> Grow the body</h3>
+        <div class="cost">heavy &middot; AST-only, per-callable parallel &middot; <code>-a 3</code></div>
+        <dl>
+          <dt>Grows (nodes)</dt><dd>The rest of <code>body</code> — every non-call statement under its callable.</dd>
+          <dt>Adds (edges)</dt><dd><code>cfg</code>, <code>cdg</code>, <code>ddg</code> (syntactic, <code>prov: ssa</code>) — all intra-callable</dd>
+        </dl>
+      </div>
+      <div class="lcard c4">
+        <h3><span class="lv lv4">L4</span> Cross the call</h3>
+        <div class="cost">heaviest &middot; points-to oracle + summary fixpoint &middot; <code>-a 4</code></div>
+        <dl>
+          <dt>Grows (nodes)</dt><dd>Synthetic vertices: <code>formal_in/out</code>, <code>actual_in/out</code>. PDGs stitch into the SDG (Horwitz&ndash;Reps&ndash;Binkley).</dd>
+          <dt>Adds (edges)</dt><dd><code>param_in</code>, <code>param_out</code>, <code>summary</code>, + semantic <code>ddg</code> (<code>prov: points-to</code>)</dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= EDGE FAMILIES ================= -->
+  <section>
+    <h2>Edge families</h2>
+    <p class="lede">The list name <em>is</em> the type — no <code>type</code> field. Every record is <code>{ src, dst, &hellip;attrs }</code>, and no endpoint may dangle: every <code>src</code>/<code>dst</code> resolves to a node in the tree, at every level.</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Family</th><th>Level</th><th>Endpoints</th><th>Lives on</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="famname"><span class="swatch" style="border-color:var(--e-call)"></span>call_graph</td><td><span class="lv lv2">L2</span></td><td>callable &rarr; callable</td><td>application</td><td><code>prov[]</code>, <code>weight</code>; immutable once written — never re-anchored to a statement</td></tr>
+        <tr><td class="famname"><span class="swatch" style="border-color:var(--e-cfg)"></span>cfg</td><td><span class="lv lv3">L3</span></td><td>statement &rarr; statement</td><td>callable</td><td><code>kind</code>: fallthrough | true | false | switch_case | loop_back | exception | return | &hellip; — exceptional paths are first-class</td></tr>
+        <tr><td class="famname"><span class="swatch" style="border-color:var(--e-cdg)"></span>cdg</td><td><span class="lv lv3">L3</span></td><td>statement &rarr; statement</td><td>callable</td><td>control dependence, from the post-dominance frontier</td></tr>
+        <tr><td class="famname"><span class="swatch" style="border-color:var(--e-ddg)"></span>ddg</td><td><span class="lv lv3">L3</span>&rarr;<span class="lv lv4">L4</span></td><td>statement &rarr; statement</td><td>callable</td><td><code>var</code> (k-limited access path); <code>prov: ssa</code> = syntactic (L3), <code>prov: points-to</code> = semantic, alias-aware (L4, additive)</td></tr>
+        <tr><td class="famname"><span class="swatch" style="border-color:var(--e-sum)"></span>summary</td><td><span class="lv lv4">L4</span></td><td>actual_in &rarr; actual_out</td><td>callable</td><td>transitive intra-caller shortcut across a call, same call site</td></tr>
+        <tr><td class="famname"><span class="swatch" style="border-color:var(--e-pio)"></span>param_in</td><td><span class="lv lv4">L4</span></td><td>actual_in &rarr; formal_in</td><td>application</td><td>argument flowing into the callee</td></tr>
+        <tr><td class="famname"><span class="swatch" style="border-color:var(--e-pio)"></span>param_out</td><td><span class="lv lv4">L4</span></td><td>formal_out &rarr; actual_out</td><td>application</td><td>result flowing back to the caller</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ================= IDENTITY ================= -->
+  <section>
+    <h2>Identity: two tiers, split at the callable leaf line</h2>
+    <p class="lede">The boundary is exactly where L1 stops. Above it, ids are durable; below it, they are ordinal within one analysis run — cross-edit durability below the callable is a declared non-goal.</p>
+    <div class="duo">
+      <div class="card">
+        <h3>Durable ids &nbsp;<span class="mono" style="font-size:12px;color:var(--muted)">&ge; callable</span></h3>
+        <p class="sub">Containment-path URIs with an app segment; survive re-analysis; what SCIP export and cross-repo joins address.</p>
+        <div class="idblock mono">can://&lt;lang&gt;/&lt;app&gt;/&lt;file&gt;/&lt;type&gt;/&lt;callable-signature&gt;<br><span class="dim">can://go/myapp/src/util.go/Hasher/Hash(string)uint64</span></div>
+      </div>
+      <div class="card">
+        <h3>Ordinal ids &nbsp;<span class="mono" style="font-size:12px;color:var(--muted)">&lt; callable</span></h3>
+        <p class="sub">Addressed within their callable: a source position for real nodes, an <code>@tag</code> for synthetic ones. Always keep the column — a bare line is not unique.</p>
+        <div class="idblock mono">&lt;callable-id&gt;@&lt;line&gt;:&lt;col&gt; <span class="dim">&mdash; …/Hash(string)uint64@15:2</span><br>&lt;callable-id&gt;@&lt;tag&gt; <span class="dim">&mdash; …@entry · …@formal_in:0 · …@16:2/actual_in:0</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= RULES ================= -->
+  <section>
+    <h2>The invariants that make &ldquo;additive&rdquo; true</h2>
+    <ul class="rules">
+      <li><b>Monotonicity.</b> Levels add facts, never contradict or delete. Two sanctioned changes only: new nodes/edge entries, and the <code>callee: null &rarr; id</code> refinement. The DDG chain holds because the posture is weak-update/over-approximate: L3's syntactic def-use is a strict subset, L4 <em>adds</em> alias-derived edges — a strong update would remove one and break <code>&sube;</code>.</li>
+      <li><b>One source blob per module.</b> Text lives once, on the module's <code>source</code>; every node's text is a slice by its span. Spans carry byte offsets alongside <code>line:col</code> so slicing is O(1). Subsumes any per-callable <code>code</code> field.</li>
+      <li><b>Present or absent — no <code>null</code></b> (except the sanctioned <code>callee</code> slot). Absence is the &ldquo;no fact&rdquo; encoding.</li>
+      <li><b>snake_case keys everywhere</b>, in every host language, so one set of SDK models parses every analyzer. <code>max_level</code> in the payload declares what was populated — consumers read it, never sniff for keys.</li>
+      <li><b>Cross-language parity.</b> Node kinds, edge-list names, edge <code>kind</code>/<code>prov</code> values are identical across analyzers. A language <em>adds</em> kinds (Go <code>defer_resume</code>, Rust <code>unsafe</code>, TS <code>interface</code>) in its SCHEMA_DECISIONS.md — it never renames or repurposes a shared name. This is what lets the SDK model the schema once: one Node, one Edge, one Application.</li>
+    </ul>
+  </section>
+
+  <!-- ================= PROJECTIONS ================= -->
+  <section>
+    <h2>Two projections, one structure</h2>
+    <div class="duo">
+      <div class="card">
+        <h3 class="mono" style="font-size:14.5px">analysis.json</h3>
+        <p class="sub">The facade contract — what the SDK models validate against.</p>
+        <p>Named-map tree (<code>symbol_table &rarr; types &rarr; callables</code>), <code>body</code> maps keyed by local id, split edge lists, <code>source</code> per module. Levels gate <b>this path only</b> (<code>-a 1&hellip;4</code>).</p>
+      </div>
+      <div class="card">
+        <h3 class="mono" style="font-size:14.5px">neo4j</h3>
+        <p class="sub">Near-identity co-primary projection — a first-class deliverable, not an afterthought.</p>
+        <p>Every node &rarr; a node row; containment rendered as typed <code>HAS_*</code>/<code>DECLARES</code> edges; every overlay edge &rarr; a typed relationship. <b>Always full depth</b> — the analyzer runs at maximum implemented level when the target is the graph.</p>
+      </div>
+    </div>
+
+    <details class="example">
+      <summary>The worked payload (abridged from the spec) — color = level that contributed each line</summary>
+      <pre><code>{
+  "schema_version": "2.0.0", "language": "go", "max_level": 4, "k_limit": 3,
+  "application": {
+    <span class="j1">"id": "can://go/myapp", "kind": "application",</span>
+    <span class="j1">"symbol_table": { "src/util.go": {</span>
+      <span class="j1">"id": "can://go/myapp/src/util.go", "kind": "module",</span>
+      <span class="j1">"source": "package util\n\nimport \"hash/fnv\"\n…",</span>
+      <span class="j1">"types": { "Hasher": { "kind": "struct", "callables": {</span>
+        <span class="j1">"Hash(string)uint64": { "kind": "method", "span": {…},</span>
+          "body": {
+            <span class="j3">"@entry": { "kind": "entry" },</span>
+            <span class="j3">"15:2":   { "kind": "statement", "span": {…} },</span>
+            <span class="j1">"16:2":   { "kind": "call", "span": {…},</span> <span class="j2">"callee": "can://go/myapp/src/fnv.go/New64()"</span> <span class="jc">// null at L1</span> },
+            <span class="j3">"17:2":   { "kind": "return" }, "@exit": { "kind": "exit" },</span>
+            <span class="j4">"@formal_in:0": { "kind": "formal_in", "of": "s" },</span>
+            <span class="j4">"16:2/actual_in:0": { "kind": "actual_in", "parent": "16:2" }, …</span>
+          },
+          <span class="j3">"cfg": [ {"src":"@entry","dst":"15:2","kind":"fallthrough"}, … ],</span>
+          <span class="j3">"cdg": [ {"src":"@entry","dst":"15:2"} ],</span>
+          <span class="j3">"ddg": [ {"src":"15:2","dst":"17:2","var":"h","prov":["ssa"]},</span>
+                   <span class="j4">{"src":"16:2","dst":"17:2","var":"h","prov":["points-to"]} ],</span>
+          <span class="j4">"summary": [ {"src":"16:2/actual_in:0","dst":"16:2/actual_out"} ]</span>
+        } } } }
+    } },
+    <span class="j2">"call_graph": [ {"src":"…/Hasher/Hash(string)uint64","dst":"…/New64()",</span>
+                    <span class="j2">"prov":["go/types"],"weight":1} ],</span>
+    <span class="j4">"param_in":  [ {"src":"…@16:2/actual_in:0","dst":"…New64()@formal_in:0"} ],</span>
+    <span class="j4">"param_out": [ {"src":"…New64()@formal_out","dst":"…@16:2/actual_out"} ]</span>
+  }
+}</code></pre>
+    </details>
+  </section>
+
+  <!-- ================= STATUS ================= -->
+  <section>
+    <h2>Where this stands</h2>
+    <div class="branches">
+      <div class="branch"><span class="pill merged">on main</span><code>590d946</code><span class="what">The L1&ndash;L4 ladder is landed as backend references (dataflow-graphs, -construction, -substrate-menu, neo4j-projection); canonical-schema.md there is still v1 — a hybrid state.</span></div>
+      <div class="branch"><span class="pill draft">unmerged</span><code>feat/schema-v2-rebuild</code><span class="what">This document's source: the v2 keystone (additive CPG model) + migration guide; backend references reconciled.</span></div>
+      <div class="branch"><span class="pill draft">unmerged</span><code>feat/frontend-schema-v2</code><span class="what">SDK side rebuilt on the two-layer model (schema-contract, wiring, facade loop); SDK v2 migration flagged as next.</span></div>
+      <div class="branch"><span class="pill open">open question</span><code>design/graph-provider-taint-frontend</code><span class="what">Should the analyzer be a pure graph provider, with taint/slicing moving to the frontend SDK? Reshapes L4's client-query surface.</span></div>
+    </div>
+  </section>
+
+  <footer>
+    Rendered from <code>canonical-schema.md</code> @ <code>feat/schema-v2-rebuild</code> and <code>dataflow-graphs.md</code> @ main <code>590d946</code> &middot; codellm-devkit/cldk-forge &middot; 2026-07-05
+  </footer>
+</div>
+
+<script>
+(function () {
+  var level = 1;
+  var FAMS = [
+    { id: 'call',      name: 'call_graph', lvl: 2, css: 'var(--e-call)' },
+    { id: 'cfg',       name: 'cfg',        lvl: 3, css: 'var(--e-cfg)'  },
+    { id: 'cdg',       name: 'cdg',        lvl: 3, css: 'var(--e-cdg)'  },
+    { id: 'ddg',       name: 'ddg',        lvl: 3, css: 'var(--e-ddg)'  },
+    { id: 'summary',   name: 'summary',    lvl: 4, css: 'var(--e-sum)'  },
+    { id: 'param_in',  name: 'param_in',   lvl: 4, css: 'var(--e-pio)'  },
+    { id: 'param_out', name: 'param_out',  lvl: 4, css: 'var(--e-pio)'  }
+  ];
+  var enabled = {};
+  FAMS.forEach(function (f) { enabled[f.id] = true; });
+
+  var EDGES = [
+    { f: 's-entry', t: 's-15',   fam: 'cfg', lvl: 3, side: 'L', k: 26 },
+    { f: 's-15',    t: 's-16',   fam: 'cfg', lvl: 3, side: 'L', k: 26 },
+    { f: 's-16',    t: 's-17',   fam: 'cfg', lvl: 3, side: 'L', k: 26 },
+    { f: 's-17',    t: 's-exit', fam: 'cfg', lvl: 3, side: 'L', k: 26 },
+    { f: 's-entry', t: 's-15',   fam: 'cdg', lvl: 3, side: 'L', k: 58 },
+    { f: 's-entry', t: 's-16',   fam: 'cdg', lvl: 3, side: 'L', k: 58 },
+    { f: 's-entry', t: 's-17',   fam: 'cdg', lvl: 3, side: 'L', k: 58 },
+    { f: 's-15', t: 's-17', fam: 'ddg', lvl: 3, side: 'R', k: 34, label: 'h · ssa' },
+    { f: 's-16', t: 's-17', fam: 'ddg', lvl: 4, side: 'R', k: 60, dash: true, label: 'h · points-to' },
+    { f: 'c-ain', t: 'c-aout', fam: 'summary', lvl: 4, side: 'R', k: 22, dash: true },
+    { f: 'n-hash', t: 'n-new64', fam: 'call', lvl: 2, cross: true, label: 'CALL · prov: go/types' },
+    { f: 'c-ain',  t: 'f-nin',  fam: 'param_in',  lvl: 4, cross: true },
+    { f: 'f-nout', t: 'c-aout', fam: 'param_out', lvl: 4, cross: true, dash: true }
+  ];
+
+  var DELTAS = {
+    1: '<b>L1 — parse + resolve.</b> The tree reaches callable depth and <b>body</b> already holds the call nodes — with <b>callee: null</b>. No edges yet.',
+    2: '<b>L2 — link.</b> Added: each call’s callee backfills <b>null → id</b> (the only sanctioned refinement), and the <b>call_graph</b> family appears at application scope.',
+    3: '<b>L3 — grow the body.</b> Added: every remaining statement under its callable, plus intra-callable <b>cfg</b>, <b>cdg</b> and syntactic <b>ddg</b> (prov: ssa). AST-only, per-callable parallel.',
+    4: '<b>L4 — cross the call.</b> Added: synthetic formal/actual vertices, <b>param_in</b> / <b>param_out</b> / <b>summary</b> edges stitching PDGs into the SDG, and alias-aware <b>ddg</b> (prov: points-to). Needs the points-to oracle.'
+  };
+  var FLAGS = {
+    1: '<code>-a 1</code> &middot; parser + resolver',
+    2: '<code>-a 2</code> &middot; still cheap',
+    3: '<code>-a 3</code> &middot; heavy, AST-only, parallel per callable',
+    4: '<code>-a 4</code> &middot; heaviest: points-to oracle + summary fixpoint'
+  };
+
+  var stage = document.getElementById('stage');
+  var svg = document.getElementById('overlay');
+  var deltaEl = document.getElementById('delta');
+  var flagEl = document.getElementById('flag');
+  var chipsEl = document.getElementById('chips');
+  var stepBtns = Array.prototype.slice.call(document.querySelectorAll('.stepper button'));
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var NS = 'http://www.w3.org/2000/svg';
+  var defs = document.createElementNS(NS, 'defs');
+  FAMS.forEach(function (f) {
+    var m = document.createElementNS(NS, 'marker');
+    m.setAttribute('id', 'arr-' + f.id);
+    m.setAttribute('viewBox', '0 0 8 8');
+    m.setAttribute('refX', '7'); m.setAttribute('refY', '4');
+    m.setAttribute('markerWidth', '6'); m.setAttribute('markerHeight', '6');
+    m.setAttribute('orient', 'auto-start-reverse');
+    var p = document.createElementNS(NS, 'path');
+    p.setAttribute('d', 'M0,0.5 L7.5,4 L0,7.5 Z');
+    p.setAttribute('class', 'em-' + f.id);
+    m.appendChild(p);
+    defs.appendChild(m);
+  });
+  svg.appendChild(defs);
+
+  // family chips
+  FAMS.forEach(function (f) {
+    var b = document.createElement('button');
+    b.className = 'chip';
+    b.setAttribute('aria-pressed', 'true');
+    b.dataset.fam = f.id;
+    b.innerHTML = '<span class="swatch" style="border-color:' + f.css + '"></span><span class="fam">' + f.name + '</span><span class="lv lv' + f.lvl + '">L' + f.lvl + '</span>';
+    b.addEventListener('click', function () {
+      enabled[f.id] = !enabled[f.id];
+      b.setAttribute('aria-pressed', String(enabled[f.id]));
+      draw();
+    });
+    chipsEl.appendChild(b);
+  });
+
+  function updateChips() {
+    Array.prototype.forEach.call(chipsEl.children, function (b) {
+      var f = FAMS.filter(function (x) { return x.id === b.dataset.fam; })[0];
+      b.disabled = f.lvl > level;
+    });
+  }
+
+  function visible(el) {
+    return el && !el.hidden && el.offsetParent !== null;
+  }
+  function anchor(el, side) {
+    var r = el.getBoundingClientRect();
+    var s = stage.getBoundingClientRect();
+    var y = r.top - s.top + r.height / 2;
+    if (side === 'L') return { x: r.left - s.left, y: y };
+    if (side === 'R') return { x: r.right - s.left, y: y };
+    return { x: r.left - s.left + r.width / 2, y: y };
+  }
+
+  function draw() {
+    while (svg.lastChild && svg.lastChild !== defs) svg.removeChild(svg.lastChild);
+    svg.setAttribute('width', stage.scrollWidth);
+    svg.setAttribute('height', stage.scrollHeight);
+
+    EDGES.forEach(function (e) {
+      if (e.lvl > level || !enabled[e.fam]) return;
+      var fe = document.getElementById(e.f), te = document.getElementById(e.t);
+      if (!visible(fe) || !visible(te)) return;
+
+      var a, b, d, lx, ly, lanch;
+      if (e.cross) {
+        var fr = fe.getBoundingClientRect(), tr = te.getBoundingClientRect();
+        var ltr = fr.left <= tr.left;
+        a = anchor(fe, ltr ? 'R' : 'L');
+        b = anchor(te, ltr ? 'L' : 'R');
+        var mx = (a.x + b.x) / 2;
+        d = 'M' + a.x + ',' + a.y + ' C' + mx + ',' + a.y + ' ' + mx + ',' + b.y + ' ' + b.x + ',' + b.y;
+        lx = mx; ly = Math.min(a.y, b.y) - 7; lanch = 'middle';
+      } else {
+        a = anchor(fe, e.side); b = anchor(te, e.side);
+        var dir = e.side === 'L' ? -1 : 1;
+        var cx = a.x + dir * e.k;
+        d = 'M' + a.x + ',' + a.y + ' C' + cx + ',' + a.y + ' ' + cx + ',' + b.y + ' ' + b.x + ',' + b.y;
+        lx = cx + dir * 4; ly = (a.y + b.y) / 2; lanch = e.side === 'L' ? 'end' : 'start';
+      }
+
+      var path = document.createElementNS(NS, 'path');
+      path.setAttribute('d', d);
+      path.setAttribute('class', 'ec-' + e.fam + (e.dash ? ' dashed' : ''));
+      path.setAttribute('marker-end', 'url(#arr-' + e.fam + ')');
+      svg.appendChild(path);
+
+      if (e.label) {
+        var t = document.createElementNS(NS, 'text');
+        t.setAttribute('x', lx); t.setAttribute('y', ly);
+        t.setAttribute('text-anchor', lanch);
+        t.setAttribute('dominant-baseline', 'middle');
+        t.textContent = e.label;
+        svg.appendChild(t);
+      }
+    });
+  }
+
+  function setLevel(n) {
+    var prev = level;
+    level = n;
+    stepBtns.forEach(function (b) { b.setAttribute('aria-pressed', String(+b.dataset.l === n)); });
+    deltaEl.innerHTML = DELTAS[n];
+    flagEl.innerHTML = FLAGS[n];
+
+    var gated = document.querySelectorAll('[data-min], [data-max]');
+    Array.prototype.forEach.call(gated, function (el) {
+      var min = el.dataset.min ? +el.dataset.min : 1;
+      var max = el.dataset.max ? +el.dataset.max : 4;
+      var hide = level < min || level > max;
+      var was = el.hidden;
+      el.hidden = hide;
+      if (!hide && was && level > prev && min === level && !reduced) {
+        el.classList.remove('just');
+        void el.offsetWidth;
+        el.classList.add('just');
+      }
+    });
+    updateChips();
+    requestAnimationFrame(draw);
+  }
+
+  stepBtns.forEach(function (b) {
+    b.addEventListener('click', function () { setLevel(+b.dataset.l); });
+  });
+
+  if (window.ResizeObserver) new ResizeObserver(function () { draw(); }).observe(stage);
+  window.addEventListener('resize', function () { requestAnimationFrame(draw); });
+
+  setLevel(1);
+})();
+</script>
