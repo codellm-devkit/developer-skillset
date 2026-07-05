@@ -1,204 +1,118 @@
-# Comprehensive schema reference (derived from the SDK Pydantic models)
+# Schema reference (v2) — per-kind fields and edges
 
-This is the **field-by-field** spec the generated analyzer's `analysis.json` must satisfy. It
-is derived from the CLDK Python SDK's own Pydantic models — the code that will actually parse
-your analyzer's output — so it is the authoritative source, not a paraphrase:
+The field-by-field appendix to `canonical-schema.md`. That file states the model (the additive
+tree + overlays); this one enumerates every node kind's fields and every edge list's shape, so
+the analyzer emits them comprehensively and the SDK models them exactly. Every node shares the
+**common node fields**; each kind adds its own. Absent = no fact (no `null`, except the one
+sanctioned `callee` slot).
 
-- **Identity-only / recommended** model: `codeanalyzer-python/codeanalyzer/schema/py_schema.py`,
-  re-exported by `python-sdk/cldk/models/python/__init__.py`.
-- **Legacy / rich-edge** model: `python-sdk/cldk/models/java/models.py`.
+## Common node fields (every node)
 
-> **Mirror it comprehensively.** Reproduce **every** field below for the shared nodes — not a
-> convenient subset. Fields you can't populate yet should still exist with sensible defaults
-> (empty list, `-1` line numbers, `None`) so the SDK model validates and later passes can fill
-> them. Then add the target language's own node kinds.
-
-## The one design choice: edge model
-
-The two reference analyzers diverge on call-graph edges. **New analyzers must use the
-identity-only (Python) model** — your recipe's step 2 mandates it, and it's what keeps edges
-cheap and the graph's nodes equal to the symbol-table callables.
-
-- **Identity-only (use this):** `call_graph: List[CallEdge]`, where an edge's `source`/`target`
-  are bare **signature strings** that exactly match a `Callable.signature` in the symbol table.
-  Rich per-call data lives on `Callsite.callee_signature` inside the caller.
-- **Rich-edge (Java legacy — do NOT copy for new languages):** `JGraphEdges.source`/`target`
-  are `JMethodDetail` objects embedding `klass` + a full `JCallable`. This is heavier and
-  duplicates symbol-table data. Documented here only so you recognize and avoid it.
-
-## Root object
-
-**Recommended (identity-only):**
-| field | type | notes |
+| Field | Type | Notes |
 | --- | --- | --- |
-| `symbol_table` | `Dict[str, Module]` | keyed by file path (stable, relative to project root) |
-| `call_graph` | `List[CallEdge]` | identity-only edges; empty `[]` for a symbol-table-only run (`-a 1`) |
-| `entrypoints` | `Dict[str, List[Entrypoint]]` | optional; default `{}` |
+| `id` | string | Durable `can://…` path (≥ callable) or `…@line:col` / `…@tag` (< callable). See `canonical-schema.md` § Identity. |
+| `kind` | string | The node-kind (below). Closed vocabulary + additive language kinds. |
+| `span` | `{ start:[line,col], end:[line,col], bytes:[from,to] }` | `line:col` addresses/displays; `bytes` slices `module.source`. Absent on some synthetic nodes. |
+| `parent` | string | **Only** when the container ≠ the enclosing node (synthetic actuals → their call site; materialized blocks/exprs). Implicit otherwise. |
 
-*Java additionally carries `version: str` and `system_dependency_graph: List[JGraphEdges]`, and
-its `call_graph` is `None` (absent) for a symbol-table-only run. New languages: prefer `call_graph: []` over
-`None`, and only add a `version`/SDG field if you actually produce them.*
+## Root and container kinds
 
-## Module (compilation unit / file)
-| field | type | default |
+### `application`
+| Field | Type | Level | Notes |
+| --- | --- | --- | --- |
+| `id` | string | 1 | `can://<lang>/<app>` — the app segment disambiguates apps in one language. |
+| `symbol_table` | `{ file → module }` | 1 | Named map, keyed by relative file path (no absolute, no `..`). |
+| `call_graph` | `edge[]` | 2 | Cross-function; see § Edges. |
+| `param_in` / `param_out` | `edge[]` | 4 | Cross-function; see § Edges. |
+
+Top-level siblings of `application` carry the manifest: `schema_version`, `language`,
+`max_level` (authoritative level marker), `k_limit` (present at L4), `analyzer{name,version}`.
+
+### `module` (per-file compilation unit)
+| Field | Type | Level | Notes |
+| --- | --- | --- | --- |
+| `id`, `kind`, `span` | — | 1 | `kind:"module"`. |
+| `package` / `namespace` | string | 1 | Language-native grouping the file belongs to. |
+| `source` | string | 1 | **The whole file's text, once.** All node text slices from this. |
+| `imports` | `import[]` | 1 | `{ name, path, alias?, span }`. |
+| `types` | `{ name → type }` | 1 | Named map. |
+| `functions` | `{ sig → callable }` | 1 | Module-level callables (Go/Python/C); empty for class-only languages. |
+| `content_hash` | string | 1 | For incremental caching; not identity. |
+
+### `type` (`class` \| `struct` \| `interface` \| `enum` \| `trait` \| `type_alias` \| …)
+| Field | Type | Level | Notes |
+| --- | --- | --- | --- |
+| `id`, `kind`, `span` | — | 1 | `kind` is the specific type kind, **not** a pile of `is_*` booleans. |
+| `base_types` | `id[]` | 1 | `extends`/embeds — durable ids of supertypes. |
+| `interfaces` | `id[]` | 1 | `implements`/satisfies. |
+| `modifiers` | `string[]` | 1 | `public`/`abstract`/`sealed`/… (language set). |
+| `decorators` | `decorator[]` | 1 | Structured `{ name, args[], span }` — **not** flat strings. |
+| `callables` | `{ sig → callable }` | 1 | Methods/constructors. |
+| `fields` | `{ name → field }` | 1 | `{ id, kind:"field", type, modifiers[], decorators[], span }`. |
+| `nesting` | `{ parent?, is_local? }` | 1 | Nested/inner/local flags as data, not booleans on the node. |
+
+### `callable` (`function` \| `method` \| `constructor` \| `initializer` \| `lambda`)
+| Field | Type | Level | Notes |
+| --- | --- | --- | --- |
+| `id`, `kind`, `span` | — | 1 | `span.bytes` → `get_method_body` = `module.source[bytes]`. |
+| `signature` | string | 1 | Human-readable; the *last* path segment of the `id`, from the one `signatureOf()`. |
+| `parameters` | `param[]` | 1 | `{ name, type, span, is_variadic? }`, ordered. |
+| `return_type` | string | 1 | |
+| `error_channel` | `string[]` | 1 | Generalized: Go `(T, error)`, Rust `Result<T,E>`, Java `throws` — one field, not `thrown_exceptions`. |
+| `modifiers`, `decorators` | — | 1 | As on `type`. |
+| `metrics` | `{ cyclomatic }` | 1 | Extensible metrics map. |
+| `refs` | `{ types:[id], fields:[id] }` | 1 | Cheap cross-refs the symbol pass already knows. |
+| `body` | `{ local-id → node }` | 3 | The statement/vertex map (below). Absent until L3. |
+| `cfg` / `cdg` / `ddg` / `summary` | `edge[]` | 3–4 | Intra-callable edges (below). |
+
+## Body node kinds (L3+, keyed by local id inside `body`)
+
+| kind | Level | Extra fields | Notes |
+| --- | --- | --- | --- |
+| `call` | **1** | `callee` (id, **`null` until L2/resolver backfill**), `arguments:[local-id]` | Call sites — recorded at L1 so `get_call_sites` is an L1 accessor; `callee` is the one refinement slot. |
+| `entry` / `exit` | 3 | — | Synthetic CFG endpoints; one each per callable; no span. |
+| `statement` | 3 | — | Ordinary statement; text = `module.source[span.bytes]`. |
+| `return` | 3 | — | Edge to `exit`. |
+| `branch` / `loop` / `switch` | 3 | — | Control constructs; sources of `cfg` branch edges + `cdg`. |
+| `formal_in` | 4 | `of` (param name) | Synthetic; child of the callable; one per formal. |
+| `formal_out` | 4 | `of` (`$ret` or a by-ref param) | Synthetic; callable exit. |
+| `actual_in` | 4 | `of` (`argN`), `parent` (call-site local-id) | Synthetic; child of a call node. |
+| `actual_out` | 4 | `of` (`$ret`), `parent` | Synthetic; child of a call node. |
+| `expression` | opt | `expr_kind` | Only with `--materialize-expressions`; carries a `parent`. |
+| `block` | opt | — | Only with `--materialize-basic-blocks`; a container between callable and statement. |
+
+## Edges
+
+Every edge is `{ src, dst, …attrs }` where `src`/`dst` are node **ids** (local within a
+callable's edge lists; full `can://` ids in the application-scope lists). The **list name is the
+type** — there is no `type` field. No dangling endpoints.
+
+| List | Scope (lives on) | Level | Endpoint kinds | Attrs |
+| --- | --- | --- | --- | --- |
+| `call_graph` | application | 2 | callable → callable | `prov:string[]`, `weight:int` (accumulated on merge) |
+| `cfg` | callable | 3 | statement → statement | `kind` (`fallthrough`\|`true`\|`false`\|`switch_case`\|`loop_back`\|`exception`\|`return`\|`break`\|`continue`\|lang-adds) |
+| `cdg` | callable | 3 | statement → statement | — (control dependence) |
+| `ddg` | callable | 3→4 | statement → statement | `var` (k-limited access path), `prov` (`["ssa"]`=syntactic/L3, `["points-to"]`=semantic/L4) |
+| `summary` | callable | 4 | actual_in → actual_out | — (transitive intra-caller) |
+| `param_in` | application | 4 | actual_in → formal_in | — |
+| `param_out` | application | 4 | formal_out → actual_out | — |
+
+## Language expansion — the rubric
+
+Keep the invariant spine (`application → module → type/callable → body`, identity-only edges,
+one `signatureOf()`), then **add** at the leaves. Record every addition in the analyzer's
+`.claude/SCHEMA_DECISIONS.md`.
+
+| Add a new… | How | Example |
 | --- | --- | --- |
-| `file_path` | `str` | — |
-| `module_name` | `str` | — (Java uses `package_name`) |
-| `imports` | `List[Import]` | `[]` |
-| `comments` | `List[Comment]` | `[]` |
-| `classes` | `Dict[str, Class]` | `{}` (Java: `type_declarations`) |
-| `functions` | `Dict[str, Callable]` | `{}` (top-level/module functions) |
-| `variables` | `List[VariableDeclaration]` | `[]` |
-| `content_hash` | `Optional[str]` | `None` — caching metadata (step 8) |
-| `last_modified` | `Optional[float]` | `None` |
-| `file_size` | `Optional[int]` | `None` |
+| **type kind** | new `kind` value on a `type` node | Go `struct`; TS `interface`, `enum`, `type_alias`; Rust `trait` |
+| **callable kind** | new `kind` value on a `callable` | closures, getters/setters, `init` blocks |
+| **body node kind** | new `kind` value in `body` | Go `select`, Python comprehension scope |
+| **CFG edge kind** | new `kind` value on a `cfg` edge | Go `defer_resume`, JS `await_resume`, Python `yield_resume` |
+| **typed field** | new field on a node | receiver type, `is_async`/`is_unsafe`, struct tags |
+| **open-vocab attr** | a string in `tags{}` | anything not worth a first-class field |
 
-## Class / Type
-| field | type | default |
-| --- | --- | --- |
-| `name` | `str` | — |
-| `signature` | `str` | e.g. `module.ClassName` (from `signatureOf()`) |
-| `comments` | `List[Comment]` | `[]` |
-| `code` | `str \| None` | `None` |
-| `decorators` | `List[Decorator]` | `[]` (Java: `annotations: List[str]`) |
-| `base_classes` | `List[str]` | `[]` (Java splits `extends_list` + `implements_list`) |
-| `methods` | `Dict[str, Callable]` | `{}` (Java: `callable_declarations`) |
-| `attributes` | `Dict[str, ClassAttribute]` | `{}` (Java: `field_declarations: List[JField]`) |
-| `inner_classes` | `Dict[str, Class]` | `{}` |
-| `start_line` / `end_line` | `int` | `-1` |
-
-*Java type-kind flags worth carrying as language node-kind info: `is_interface`,
-`is_enum_declaration`, `is_record_declaration`, `is_annotation_declaration`, `is_inner_class`,
-`is_nested_type`, `is_entrypoint_class`, plus `enum_constants`, `record_components`,
-`initialization_blocks`.*
-
-## Callable (function / method / constructor)
-| field | type | default |
-| --- | --- | --- |
-| `name` | `str` | — |
-| `path` | `str` | file path of the declaration |
-| `signature` | `str` | e.g. `module.Class.method` — **the edge id** |
-| `comments` | `List[Comment]` | `[]` |
-| `decorators` | `List[Decorator]` | `[]` (Java: `annotations`, `modifiers`) |
-| `parameters` | `List[CallableParameter]` | `[]` |
-| `return_type` | `Optional[str]` | `None` |
-| `code` | `str \| None` | `None` |
-| `start_line` / `end_line` / `code_start_line` | `int` | `-1` |
-| `accessed_symbols` | `List[Symbol]` | `[]` (Java: `accessed_fields`, `referenced_types`) |
-| `call_sites` | `List[Callsite]` | `[]` — **recorded during symbol-table build, callees backfilled when the resolver call graph runs** |
-| `inner_callables` | `Dict[str, Callable]` | `{}` |
-| `inner_classes` | `Dict[str, Class]` | `{}` |
-| `local_variables` | `List[VariableDeclaration]` | `[]` (Java: `variable_declarations`) |
-| `cyclomatic_complexity` | `int` | `0` |
-| `is_entrypoint` | `bool` | `False` |
-| `entrypoint_framework` | `Optional[str]` | `None` |
-
-*Java extras: `is_constructor`, `is_implicit`, `thrown_exceptions`, `declaration`,
-`crud_operations`, `crud_queries`. Carry constructor-ness for any language (you need it for
-the `new`/`__init__` normalization).*
-
-## Callsite (rich per-call metadata, on the caller)
-| field | type | default |
-| --- | --- | --- |
-| `method_name` | `str` | — |
-| `receiver_expr` | `Optional[str]` | `None`/`""` |
-| `receiver_type` | `Optional[str]` | `None` |
-| `argument_types` | `List[str]` | `[]` |
-| `return_type` | `Optional[str]` | `None` |
-| `callee_signature` | `Optional[str]` | **`None` when recorded; filled in place when the resolver call graph is built** |
-| `is_constructor_call` | `bool` | `False` |
-| `start_line`/`start_column`/`end_line`/`end_column` | `int` | `-1` |
-
-*Java adds `argument_expr`, `is_static_call`/`is_private`/`is_public`/`is_protected`/
-`is_unspecified`, `crud_operation`, `crud_query`, and a `comment`.*
-
-## CallEdge (identity-only — the model to use)
-| field | type | default |
-| --- | --- | --- |
-| `source` | `str` | caller `Callable.signature` |
-| `target` | `str` | callee `Callable.signature` |
-| `type` | `Literal["CALL_DEP"]` | `"CALL_DEP"` |
-| `weight` | `int` | `1` (accumulate when merging backends) |
-| `provenance` | `List[str]` | `[]` — e.g. `["tsc"]`, `["jedi","joern"]` |
-| `tags` | `Dict[str, str]` | `{}` — free-form, extension-namespaced |
-
-## Supporting leaf models
-- **Import**: `module`, `name`, `alias?`, line/column span. (Java: `path`, `is_static`,
-  `is_wildcard`.)
-- **Comment**: `content`, line/column span, `is_docstring` (Java: `is_javadoc`).
-- **CallableParameter**: `name`, `type?`, `default_value?`, line/column span. (Java adds
-  `annotations`, `modifiers`.)
-- **Decorator**: `name`, `qualified_name?`, `positional_arguments[]`, `keyword_arguments{}`,
-  span. (The Java equivalent is flat `annotations: List[str]`.)
-- **Symbol**: `name`, `scope`, `kind`, `type?`, `qualified_name?`, `is_builtin`, `lineno`,
-  `col_offset`.
-- **VariableDeclaration**: `name`, `type?`, `initializer?`, `value?`, `scope`, span.
-- **ClassAttribute**: `name`, `type?`, `comments[]`, span.
-- **Entrypoint** (optional): `signature`, `framework`, `detection_source`, route/method
-  fields, `tags{}`.
-
-## Expanding the schema for the target language (encouraged)
-
-Mirroring the shared fields is the floor, not the ceiling. A good language pack **captures
-what is idiomatic and analytically important in the target language as first-class schema** —
-it does not cram the language into the Java/Python mold and discard the rest. You are
-explicitly free to add node kinds and fields. The only thing you may not change is the spine.
-
-**The invariant spine (never drift):** the root keys `symbol_table` (a `Dict[str, Module]`)
-and `call_graph` (identity-only `List[CallEdge]`); the Module → Class/Callable nesting; one
-`signatureOf()` producing every id; and edges whose `source`/`target` byte-match real
-`Callable.signature`s. The shared SDK facade methods depend on exactly this and nothing more.
-
-**Everything else is yours to extend**, because the new language gets its **own**
-`cldk/models/<lang>/` Pydantic models. Add a field to the analyzer output *and* the
-corresponding `<L>` model in the same change, and validation still passes — you own both
-sides. You are not limited to the fields in this reference.
-
-### Decision rubric — where does a new concept go?
-1. **New top-level node kind** (sibling of Class/Callable in `Module`, or a new collection) —
-   when the concept is a *declaration* you'll want to look up by signature or point edges at
-   (TS `interface`/`type`-alias/`enum`; Go `struct`/`interface`; Rust `trait`/`impl`). Give it
-   its own `signature` from `signatureOf()` so edges and `base_classes` can reference it.
-2. **New typed field on an existing node** — when the concept is an *attribute* of a callable/
-   class/callsite that consumers will query directly and want validated (Go method
-   `receiver_type`; Rust `is_async`/`is_unsafe`; TS `type_parameters` for generics; visibility/
-   mutability). Add it to both the output and the `<L>` model with a sensible default.
-3. **Open-vocabulary `tags` / `provenance`** — when the metadata is low-stakes, sparse, or
-   framework/extension-specific and not worth a typed field (Go struct tags, build constraints;
-   TS JSX flags; experimental attributes). These are `Dict[str,str]`/`List[str]`, so they
-   round-trip without schema churn and without every consumer needing to know about them.
-
-Prefer a typed field (1 or 2) when a consumer will branch on the value; prefer `tags` (3) when
-it's descriptive metadata. When unsure, start with `tags` and promote to a field later.
-
-### Worked expansions
-- **TypeScript**: `interface`, `type`-alias, and `enum` as Class-siblings; `type_parameters`
-  for generics; union/intersection types captured in `type` strings; `extends`/`implements`
-  chains → `base_classes`; TS decorators → `decorators`; ambient/`declare` and JSX flags →
-  `tags`.
-- **Go**: `struct` and `interface` node kinds; method `receiver_type` on the callable;
-  embedded structs and satisfied interfaces → `base_classes`; goroutine launches and channel
-  ops are good `Callsite`/`tags` candidates; struct tags and build constraints → `tags`.
-- **Rust**: `trait`, `impl` block, and `enum` (with variants) node kinds; `is_async`/
-  `is_unsafe`/`is_const` and lifetime/generic params as fields; trait bounds → `base_classes`;
-  macro invocations as `Callsite`s tagged with provenance `"macro"`.
-
-Whatever you add, keep snake_case keys and make new fields optional-with-default so a partially
-populated `analysis.json` (e.g. symbol-table-only, or a degraded resolve) still validates.
-
-## The validation contract (success criterion)
-The generated analyzer's output is correct iff the SDK model loads it without error:
-
-```python
-import json
-from cldk.models.<lang> import <Lang>Application   # the models you add (subprocess backend)
-app = <Lang>Application(**json.load(open("analysis.json")))   # must not raise
-assert app.symbol_table                                       # non-empty
-sigs = { ... all Callable.signature in app.symbol_table ... }
-assert all(e.source in sigs and e.target in sigs for e in app.call_graph)  # no dangling edges
-```
-
-Because the SDK `<Lang>Application` model is itself a faithful mirror of this reference, "passes
-Pydantic validation + no dangling edges" is the comprehensive, mechanical check that the schema
-was mirrored fully and correctly. Build the SDK models first (from this reference), then make
-the analyzer's output validate against them.
+Never: rename a shared field, repurpose a shared `kind`, add a rich-edge variant, or introduce a
+node that isn't reachable from `application` by containment. Those break the single-model
+premise the whole SDK depends on. The **parity clause** in `canonical-schema.md` is the rule;
+this table is how you satisfy it.

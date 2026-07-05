@@ -27,10 +27,12 @@ note when they're the *same* tool. TS's checker does both; tree-sitter languages
 need a separate resolver (an LSP or a type checker). This single fact drives steps
 5 and 6.
 
-## 2. Mirror the canonical schema, then extend at the leaves
-Reproduce `Application { symbol_table: Map<path, Module>, call_graph: Edge[] }`, the
-Module → Class/Callable hierarchy, identity-only edges that reference signature strings with
-a provenance tag, and a Callsite that holds the rich per-call metadata. That spine is the
+## 2. Mirror the canonical schema (v2), then extend at the leaves
+Reproduce the **additive tree** of `canonical-schema.md`: `application → symbol_table{module} →
+types{}/functions{} → callables{} → body{}`, with `can://` ids, spans (byte offsets), module-level
+`source`, and the split identity-only edge lists (`call_graph` at the application; `cfg`/`cdg`/
+`ddg`/`summary` on the callable). Edges reference node ids with a `prov` tag; call sites are `call`
+nodes in `body`. That spine is the
 invariant. **Then expand the schema to capture what's idiomatic in the target language as
 first-class data** — add node kinds (interfaces/type-aliases/enums for TS; structs/interfaces
 for Go; traits/impls for Rust), typed fields (receiver types, async/unsafe flags, generics),
@@ -58,25 +60,23 @@ JS/TS reads `tsconfig.json` and ensures `node_modules`. Make it **idempotent**, 
 and **degrade to partial types rather than crashing**. Full detail and timing (source-level
 vs bytecode resolvers): `project-materialization.md`.
 
-## 5. Build the structural symbol table (level 1, part 1)
-Walk the parse tree per file and populate Module → {imports, comments, classes,
-interfaces/types/enums, functions, module vars}; each class → methods/properties; each
-callable → params, return type, decorators, locals, spans, raw code, and the **unresolved
-call sites** (callee name + receiver expr + arg exprs + position, with `callee_signature`
-left null). Stamp per-file caching metadata (content hash, mtime, size). This step records
-call sites but doesn't resolve them into edges — that's the cheap next step (still level 1;
-type fields may still be filled here if your resolver is a same-tool checker). Do this
-file-by-file, modeled on how Java's `SymbolTable.extractAll` and Python's `core.py` iterate
-the project — see `symbol-table-construction.md`.
+## 5. L1 — build the tree (symbol table)
+Walk the parse tree per file and populate the module → `{imports, types, functions}`, each type →
+`callables`/`fields`, each callable → params, return type, decorators, spans (byte offsets), and
+its **`call` nodes in `body`** (callee name + receiver expr + arg exprs + span, `callee: null`).
+Store the file's text once as the module's **`source`** (all node text slices off it). Stamp
+per-file caching metadata (content hash, mtime, size). This step records call sites but doesn't
+resolve them into edges — that's L2. Do it file-by-file, modeled on Java's `SymbolTable.extractAll`
+and Python's `core.py` — see `symbol-table-construction.md`.
 
-## 6. Build the resolver-based call graph (level 1, part 2 — cheap, strictly additive)
-This is **cheap and part of the level-1 analysis**: the same Tier-1 resolver already loaded for
-the symbol table resolves call sites into edges. For each recorded call site, map the callee to
-a declaration, write its signature into `callee_signature` (**backfilling the site in place**),
-and emit an identity-only edge `source_sig → target_sig` with `provenance` set to your resolver
-(e.g. `"tsc"`). Handle constructors/`new`, method dispatch via receiver type, and an explicit
-unresolved-fallback path (record the site, skip the edge — never crash). Never mutate the symbol
-table beyond filling `callee_signature`.
+## 6. L2 — the resolver-based call graph (cheap, strictly additive)
+The same Tier-1 resolver already loaded for the tree resolves the `call` nodes into edges. For
+each `call` node, map the callee to a declaration, backfill its **`callee`** id in place
+(`null → id`, the one sanctioned mutation), and emit a `call_graph` edge `{src, dst}` (both
+callable ids) with `prov` set to your resolver (e.g. `["tsc"]`). Handle constructors/`new`, method
+dispatch via receiver type, and an explicit unresolved-fallback (record the `call` node, skip the
+edge — never crash). Never mutate the tree beyond filling `callee`. `call_graph` edges are
+**immutable once written** — never re-anchored to a statement at L3.
 
 This base graph comes from the **Tier-1 resolver** and is deliberately lightweight — no
 points-to, dataflow, or k-CFA. *Don't call the tiers "whole-program vs not": once deps are

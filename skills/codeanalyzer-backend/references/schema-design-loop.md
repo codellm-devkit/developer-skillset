@@ -1,10 +1,14 @@
 # Schema design as a comparison-and-differentiation loop
 
-Designing the analyzer's schema is **not** "copy Java, bolt on a few fields." It is an
-iterative, reflective process: you anchor on the **mature reference analyzers** (currently
-**Java** and **Python**; more languages will join as they mature), interrogate how the target
-language genuinely differs, and — crucially — **bring every divergence to the user as a
-decision** rather than choosing silently. You do this **node by node**, not all at once.
+The **shared spine is already designed** — it's the v2 keystone (`canonical-schema.md`): the node
+tree, the `can://` ids, the additive levels, the edge families. This loop is **not** re-designing
+that; it is confirming the **language-specific expansion** — which `type`/`callable`/`body` kinds,
+which `cfg`-edge kinds, and which typed fields this language adds to the spine (the parity clause:
+add at the leaves, never rename the shared vocabulary). You anchor on the **keystone plus the
+mature reference analyzers** (**Java** and **Python**), interrogate how the target language
+genuinely differs, and — crucially — **bring every divergence to the user as a decision** rather
+than choosing silently. You do this **node by node**, not all at once, recording each answer in
+`.claude/SCHEMA_DECISIONS.md`.
 
 This loop only *designs the schema* (the analyzer-side types + the SDK `<L>` Pydantic models).
 Actually walking files to fill the table is a separate stage — see

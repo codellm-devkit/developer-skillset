@@ -1,17 +1,23 @@
-# Neo4j projection (optional second output surface)
+# Neo4j projection (the co-primary output surface)
 
-Every mature CLDK analyzer now emits **two** projections of the same analysis: the canonical
-`analysis.json` (the facade contract, always built) and an **optional Neo4j graph**. The graph
-is not an ingestion of `analysis.json` — it is an **alternative projection of the same in-memory
-IR** (the symbol table + call graph objects), selected by `--emit neo4j`. `analysis.json`
-remains the SDK's default contract; the graph is a queryable, incrementally-updatable second
-surface. Java, Python, and TypeScript analyzers all ship this; a new analyzer should mirror it
-**once level-1 JSON is solid** — treat it as part of the *CLI, caching/incremental, packaging*
-stage, not a prerequisite.
+Every CLDK analyzer emits **two projections of the one structure** (`canonical-schema.md`): the
+`analysis.json` tree and a **Neo4j graph**. They are **co-primary** — building both is a
+first-class deliverable, not an afterthought. The graph is not an ingestion of `analysis.json` —
+it is a projection of the **same node tree + edge overlays**, selected by `--emit neo4j`.
+`analysis.json` is the SDK's default contract; the graph is the queryable, incrementally-updatable
+surface. Java, Python, and TypeScript analyzers all ship it.
 
-Neo4j is **optional at every layer**: the driver is a lazy/optional dependency (Python/TS import
-it on demand; Java loads it reflectively so GraalVM `native-image` can prune it), and nothing in
-the JSON path depends on it.
+**Containment renders as edges.** A graph DB has no nesting, so the schema's containment tree
+becomes typed `HAS_*`/`DECLARES` relationships (the `HAS_MODULE`/`DECLARES`/`HAS_CALLABLE`/
+`HAS_CFG_NODE` families below), while the overlay edges (`call_graph`, `cfg`, `cdg`, `ddg`,
+`param_in`/`param_out`, `summary`) become their own typed relationships. Node labels are the v2
+node **kinds**; the `can://` id is the merge key. This is a **near-identity** projection of the
+JSON tree — the same nodes and edges, rendered as a property graph.
+
+Neo4j stays **optional at run time** (you don't need a running DB to emit `analysis.json`): the
+driver is a lazy/optional dependency (Python/TS import it on demand; Java loads it reflectively so
+GraalVM `native-image` can prune it). "Co-primary" means *the analyzer must be able to produce it*,
+not that every run does.
 
 ## CLI surface (add to `cli-contract.md`)
 

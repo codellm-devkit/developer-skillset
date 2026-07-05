@@ -78,11 +78,19 @@ Cross-function edges (`CALL`, `PARAM_IN/OUT`, `SUMMARY`) reference both endpoint
 referenced signature exists in the symbol table, every referenced node_id exists in that
 function's emitted graph.
 
-## Emission — `analysis.json` sections and flags
+## Emission — where the graphs live in the tree
 
-Graphs are emitted as an **optional top-level section**, present from level 3, preserving the
-facade invariant that `analysis.json` is the single facade-visible output. The `functions` map
-(CFG + PDG) is the **level-3** payload; `sdg_edges` is added at **level 4**:
+> **Schema v2 supersedes the standalone `program_graphs` section below.** In the canonical schema
+> (`canonical-schema.md`), dataflow is **not** a separate top-level object — it grows *inside the
+> tree*: each callable gains a `body{}` map of statement/vertex nodes plus the intra-callable edge
+> lists `cfg`/`cdg`/`ddg`/`summary`, and the application gains the cross-callable `param_in`/
+> `param_out` lists. Node endpoints are `can://…@line:col` ids, not `(signature, node)` pairs.
+> Read `canonical-schema.md` for the authoritative shape; the ladder, gates, and construction
+> stages in this file are shape-agnostic and still govern. The block below is retained only as the
+> conceptual node/edge inventory (kinds, `cfg`/`pdg`/`sdg` families) — map it onto the v2 tree.
+
+Historically graphs were a top-level `program_graphs` object; the families (CFG, PDG = CDG+DDG,
+SDG) and their level assignment are unchanged, only their placement:
 
 ```jsonc
 {

@@ -1,7 +1,16 @@
 # The analysis.json contract the SDK models must satisfy
 
+> **Schema v2 — this file predates it.** The analyzer contract is now the backend skill's v2
+> keystone (`codeanalyzer-backend/references/canonical-schema.md`): one additive node-tree + typed
+> edges (a CPG), `can://` ids, `application → symbol_table{module} → types/functions → callables →
+> body`, split edge lists, `source` per module, `max_level`. Mapping the SDK's Pydantic models to
+> v2 while **keeping the same public API** (`CLDK.<lang>(...)`, the same accessors) is a **major SDK
+> release** (the backend hand-off's `§ c`) and is the next rebuild of *this* skill. Until that lands,
+> read the sections below as the *old* (v1) contract; the authoritative shape is the v2 keystone and
+> the analyzer's real sample `analysis.json`.
+
 The analyzer (built by the **codeanalyzer-backend** skill) emits a single `analysis.json`. Your job
-in this skill is to encode SDK-side `<L>` models that **load and validate that JSON**, plus a facade
+in this skill is to encode SDK-side models that **load and validate that JSON**, plus a facade
 that queries it. This file states the **invariant contract** the models must satisfy. It is *not*
 the exhaustive field catalog — **the authoritative, complete field list is whatever the analyzer's
 sample `analysis.json` actually contains** (plus the node kinds recorded in the backend's

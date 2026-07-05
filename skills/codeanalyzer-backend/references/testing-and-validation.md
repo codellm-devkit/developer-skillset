@@ -53,13 +53,13 @@ analyzer repo — see the frontend skill's `sdk-testing.md`.
 
 Run the analyzer on the fixture and confirm all of the following:
 
-1. **Output validates** against the SDK `<Lang>Application` Pydantic model —
-   `<Lang>Application(**json.load(open("analysis.json")))` must not raise.
+1. **Output validates** against the SDK `Application` Pydantic model —
+   `Application(**json.load(open("analysis.json")))` must not raise.
 2. **`symbol_table` is non-empty** and keyed by **stable relative paths** — no key starts
    with `/` (absolute) or `..` (CWD-relative). Both are common bugs; assert them
    explicitly.
 3. A known file's `Module` contains the expected types, functions, and call sites with
-   `callee_signature == null`. (Call sites are recorded but not resolved at this stage.)
+   `callee == null`. (Call sites are recorded but not resolved at this stage.)
 4. **Re-running reuses the cache** — mtime of `analysis.json` (or `analysis_cache.json`)
    is unchanged on a second non-eager run.
 
@@ -70,11 +70,11 @@ Do not proceed to Call Graph Construction until this passes.
 1. Every edge endpoint matches a real signature in the symbol table — no dangling nodes.
    Check: `for e in app.call_graph: assert e.source in all_sigs and e.target in all_sigs`.
 2. Every edge has a non-empty `provenance` list naming the resolver.
-3. `callee_signature` is backfilled on successfully resolved call sites (non-null, non-empty
+3. `callee` is backfilled on successfully resolved call sites (non-null, non-empty
    string).
 4. A named expected edge is present — assert the exact `(source, target)` pair.
 5. At least one cross-package/cross-module edge is present.
-6. Output still validates against `<Lang>Application`.
+6. Output still validates against `Application`.
 
 ### Caching tests (add after implementing caching/incremental — `backend-recipe.md` step 8)
 
@@ -85,7 +85,7 @@ Four behaviors to assert on the binary:
 | Test | What to assert |
 |------|----------------|
 | `CacheFileWritten` | After `Analyze()` with `CacheDir` set, `analysis_cache.json` exists in that dir. |
-| `CacheContentsRoundTrip` | `analysis_cache.json` deserializes to a valid `<Lang>Application` with the same symbol table key count as the in-memory result. |
+| `CacheContentsRoundTrip` | `analysis_cache.json` deserializes to a valid `Application` with the same symbol table key count as the in-memory result. |
 | `SecondRunReuses` | Second run with same non-eager opts returns the same symbol table key count; `analysis.json` (or cache file) mtime is unchanged. |
 | `EagerForcesRebuild` | After seeding the cache, a run with `Eager=true` rewrites `analysis_cache.json` (mtime advances). Use `time.Sleep` / `time.sleep` before the eager run to ensure the filesystem timestamp differs. |
 
@@ -95,6 +95,24 @@ Four behaviors to assert on the binary:
 clear message, never silently fall back to JSON. Assert the non-zero exit and the message.
 See `cli-contract.md § Flag validation requirements`.
 
+### Monotonicity gate (the additive-paradigm invariant)
+
+The schema is additive (`canonical-schema.md` § Monotonicity), so the level outputs must nest:
+run the analyzer at `-a 1`, `-a 2`, `-a 3`, `-a 4` on the fixture and assert
+**`json(-a 1) ⊆ json(-a 2) ⊆ json(-a 3) ⊆ json(-a 4)`** — every node and edge present at a lower
+level is present, unchanged, at every higher level. The **only** sanctioned differences are
+additions (new `body` nodes, new edge-list entries) and the single `callee: null → id`
+refinement. A diff that *changes* an existing fact (a rewritten span, a re-anchored `call_graph`
+edge, a removed syntactic `ddg` edge) fails the gate — it means a level rewrote instead of added.
+Also assert the two projections agree: the Neo4j node/edge counts at full depth match the JSON at
+`max_level` (modulo the containment `HAS_*` edges Neo4j makes explicit).
+
+### Two-tier identity gate
+
+`can://` ids (≥ callable) are stable across two runs on unchanged source; `…@line:col` ids carry a
+column (assert no id is a bare line); every edge endpoint resolves to a real node (no dangling, at
+every level and in both projections).
+
 ---
 
 ## 3. Definition of done (analyzer surface)
@@ -103,7 +121,7 @@ Both this surface and the SDK surface (frontend skill) must pass before the lang
 considered complete.
 
 - [ ] `go test ./...` (or equivalent) passes — all symbol table, call graph, and caching tests.
-- [ ] Output on the fixture validates against `<Lang>Application` without error.
+- [ ] Output on the fixture validates against `Application` without error.
 - [ ] `symbol_table` keys are relative paths; no key is absolute or `..`-prefixed.
 - [ ] Every language-specific field has at least one test asserting a concrete value.
 - [ ] Named expected call-graph edge is asserted (not just "non-empty").

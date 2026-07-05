@@ -28,15 +28,20 @@ codeanalyzer/
   core.py                # ORCHESTRATOR ONLY. Delegates every phase; inlines no analysis logic.
   options/               # CLI option / AnalysisOptions model
   config/                # static / environment config, distinct from CLI options
-  schema/                # the Pydantic (or native) models — the data contract
-  syntactic_analysis/    # symbol-table construction (the per-file builder)
-  semantic_analysis/     # call-graph construction
-    call_graph.py        #   the resolver-based graph + graph<->schema adaptation
+  schema/                # the node/edge models — the v2 data contract (canonical-schema.md)
+  syntactic_analysis/    # L1: the tree builder (per-file, to callable depth) + call nodes
+  semantic_analysis/     # L2: call graph; L3/L4: the dataflow passes (cfg/pdg/sdg)
+    call_graph.py        #   the resolver-based call_graph + graph<->schema adaptation
     <framework>/         #   the heavy framework backend (joern/wala/svf), ISOLATED in its own subpackage
+  neo4j/                 # the CO-PRIMARY projection: project() -> GraphRows -> cypher/bolt + schema catalog
   analysis/              # the PLUGGABLE pass layer (registry + AnalysisPass base)
   frameworks/            # entrypoint-finder base + concrete finders, built ON the pass layer
   utils/                 # logging, progress, fs helpers — no analysis logic
 ```
+
+The `neo4j/` subpackage is **not optional** — the Neo4j graph is a co-primary output
+(`neo4j-projection.md`), so its seam exists in the skeleton like any other, isolated behind
+`project()`.
 
 Not every language needs every box on day one (the framework backend and pass finders may ship
 empty), but the **skeleton and the seams must exist from the start**, because that is what makes
