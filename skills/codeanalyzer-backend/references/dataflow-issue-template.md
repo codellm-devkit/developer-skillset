@@ -15,22 +15,29 @@ staged PRs reference it.
 ---
 
 ```markdown
-Title: Levels 3–4: native dataflow graphs (CFG/DFG/PDG/SDG/CPG) and taint analysis for <lang>
+Title: Levels 3–4: native dataflow graphs (CFG/DFG/PDG/SDG/CPG) for <lang>
 
 PROBLEM
 
 codeanalyzer-<lang> today emits the level-1 symbol table and resolver call
 graph<, plus level-2 framework enrichment via <framework> if applicable>. It has
-no dataflow: no CFG, no dependence graphs, no way to answer "what does this value
-affect" or "does user input reach this sink". This issue adds levels 3–4 — native
-dependence graphs built from <lang>'s own AST, per the skillset's
-dataflow-graphs.md contract — and exposes slicing and taint as queries over them.
+no dataflow: no CFG, no dependence graphs, nothing for a client to answer "what
+does this value affect" or "does user input reach this sink" against. This issue
+adds levels 3–4 — native dependence graphs built from <lang>'s own AST, per the
+skillset's dataflow-graphs.md contract — as the GRAPH SUBSTRATE those questions
+are answered over.
+
+Scope boundary: this analyzer is a pure graph provider. It emits the graph
+(CFG/PDG/SDG with SUMMARY edges, and the CPG projection) and stops. Slicing and
+taint are reachability QUERIES over the graph and live in the frontend SDK
+(cldk-sdk-frontend) — they are explicitly out of scope here, and this analyzer
+emits no `taint_flows` section and ingests no sources/sinks/sanitizers policy.
 
 The two levels are shipped separately and the split is load-bearing:
   - Level 3 (-a 3): intraprocedural CFG/DFG/PDG per function. AST-only, no
     points-to oracle, per-callable parallel. Shippable on its own.
-  - Level 4 (-a 4): the interprocedural SDG + taint/slicing clients. Needs the
-    points-to oracle and the whole-program summary fixpoint. Builds on L3.
+  - Level 4 (-a 4): the interprocedural SDG. Needs the points-to oracle and the
+    whole-program summary fixpoint. Builds on L3.
 
 Native is the constraint: everything runs in-process in the analyzer's own
 ecosystem. No external analysis engines, no subprocess to a foreign toolchain.
@@ -46,9 +53,10 @@ GOALS (the contract, in one list)
    surface is level-agnostic: --emit neo4j always projects the full SDG;
    -a/--graphs gate the JSON path only, and combining them with --emit neo4j
    is an explicit error.
-3. Expose backward slicing and taint as SDG queries; sources/sinks/sanitizers/
-   library models supplied as data (JSON spec + JSON Schema validation), emitted
-   as a `taint_flows` section.
+3. Emit transitive `SUMMARY` edges (HRB) into the SDG — the context-sensitivity
+   substrate. Backward slicing and taint are NOT built here: they are frontend
+   SDK queries over this graph (cldk-sdk-frontend). This analyzer emits no
+   `taint_flows` section and ingests no sources/sinks/sanitizers policy.
 4. Hold the cross-language parity clause: shared node kinds / edge types /
    JSON shapes; <lang>-specific additions are additive and recorded in
    SCHEMA_DECISIONS.md.
@@ -107,20 +115,20 @@ PART 2 — INTERPROCEDURAL (stages 5–7)
   9. SDG assembly: actual/formal in/out nodes, CALL / PARAM_IN / PARAM_OUT edges,
      SUMMARY edges from the composed summaries; globals ride as extra formals.
 
-PART 3 — EMISSION AND CLIENTS (stage 8)
+PART 3 — EMISSION AND THE CPG (stage 8)
 
- 10. `program_graphs` section in analysis.json per the contract; `--graphs`
-     selector with strict flag validation; co-evolve the shared SDK Pydantic
-     models (ProgramGraphs / GraphNode / GraphEdge / SDGEdge / TaintFlow) in the
-     same change.
+ 10. `program_graphs` section in analysis.json per the contract, including
+     `SUMMARY` edges; `--graphs` selector with strict flag validation; co-evolve
+     the shared SDK Pydantic models (ProgramGraphs / GraphNode / GraphEdge /
+     SDGEdge) in the same change. (TaintFlow / slice-result models live with the
+     client, in cldk-sdk-frontend, not here.)
  11. CPG projection: CFGNode label + CFG_NEXT/CDG/DDG/PARAM_IN/PARAM_OUT/SUMMARY/
      HAS_CFG_NODE in the neo4j/ subpackage; schema.neo4j.json bump; conformance
      test extended.
- 12. Backward slicing (two-phase context-sensitive traversal) and taint
-     (labeled reachability, sanitizer blocking, lazy witness reconstruction)
-     as SDG queries; sources/sinks/sanitizers configurable as data (built-in
-     pack < config file < inline flags); `taint_flows` output with model ids
-     for explainability.
+
+ Backward slicing and taint are OUT OF SCOPE for this issue — they are frontend
+ SDK queries over the graph emitted above (cldk-sdk-frontend), not analyzer
+ features. File them against the SDK, not here.
 
 CAVEATS AND KNOWN RISKS
 
@@ -161,26 +169,30 @@ STAGED PRs
         (Independent of PR C; do it whenever the oracle is ready — it gates L4,
         not L3.)
   PR D  Summaries: hammock regions, SCC fixpoint with k-limiting; SDG assembly;
-        sdg_edges emission (`-a 4`); MVP taint over the call graph; then the
+        sdg_edges emission (`-a 4`) INCLUDING transitive SUMMARY edges; then the
         ready-queue wavefront over the SCC DAG, differential-tested against
-        --jobs 1.
-  PR E  Models-as-data: JSON spec + Schema, default pack, precedence; taint_flows
-        output + lazy witness paths; SDK models co-evolved.
-  PR F  Points-to-backed (alias-aware) propagation via <oracle>; replace the
+        --jobs 1. (No taint here — SUMMARY edges are the substrate a frontend
+        taint query consumes.)
+  PR E  Points-to-backed (alias-aware) propagation via <oracle>; replace the
         type-based MVP stub.
-  PR G  (optional) CPG Neo4j projection + conformance test + schema bump — skip
+  PR F  (optional) CPG Neo4j projection + conformance test + schema bump — skip
         if the Neo4j surface is not in scope; the SDG is the core artifact and
         no client analysis depends on the CPG.
-  PR H  (later) Incremental re-analysis over the recorded dependency edges.
+  PR G  (later) Incremental re-analysis over the recorded dependency edges.
+
+  (Slicing + taint as SDG queries, sources/sinks/sanitizers model packs, and the
+   `taint_flows` output are a SEPARATE ladder in cldk-sdk-frontend — not PRs on
+   this analyzer.)
 
 VERIFICATION / DEFINITION OF DONE
 
-  - Every gate in dataflow-construction.md passes on the fixture (CFG,
-    dominance, DFG, PDG-slice, summary, SDG, client gates) — exact expected
-    sets, not "non-empty".
+  - Every analyzer gate in dataflow-construction.md passes on the fixture (CFG,
+    dominance, DFG, PDG-slice, summary, SDG) — exact expected sets, not
+    "non-empty". (The slice/taint gates are frontend gates — verified in
+    cldk-sdk-frontend, not here.)
   - Fixture covers the full stage-1 lowering checklist for <lang> plus the
-    shared fixture minimums (aliasing, SCC recursion, multi-file flow,
-    sanitized + unsanitized taint pair).
+    shared fixture minimums (aliasing, SCC recursion, multi-file flow, and a
+    source→sink data-flow pair so the FRONTEND can later assert taint over it).
   - analysis.json validates against the shared SDK ProgramGraphs models at both
     -a 3 (functions{}) and -a 4 (+ sdg_edges); parity clause holds (no
     renamed/repurposed shared vocabulary); L1 ⊆ ... ⊆ L4 superset gate passes.

@@ -128,6 +128,28 @@ def _analysis(tmp_path, level=AnalysisLevel.symbol_table):
 
 ---
 
+## 3b. Client-analysis gates (slicing & taint — SDK-side, only when the language has level 3/4)
+
+Slicing and taint run in the SDK over the analyzer's emitted dependence graph, not in the analyzer
+(see `SKILL.md § Client analyses`). When the wired language exposes the level-3/4 graphs, the query
+surface gets these gates, over the analyzer's own dataflow fixture:
+
+- **Slice gate:** a backward slice of a named `can://…@line:col` criterion equals the hand-computed
+  expected node set — **exact**, not "non-empty". This catches both missing control dependences and
+  missing def-use edges in the consumed graph, and a broken traversal in the SDK.
+- **Taint gate:** with a small sources/sinks/sanitizers spec, one known source→sink flow is found;
+  the **same** flow with a sanitizer interposed is reported `sanitized` (not dropped). Assert the
+  witness `path` is a contiguous `can://…@line:col` chain and carries the matching model id.
+- **Context-sensitivity check (if `summary` edges are present):** a flow that enters a callee from
+  call site A does **not** exit at an unrelated call site B (no unrealizable path). If the analyzer
+  hasn't shipped `summary` edges yet, record this as a known over-approximation in the result
+  rather than asserting it away.
+
+These are the frontend counterparts of the backend's CFG/PDG/SDG gates — the backend proves the
+graph is correct; these prove the SDK's queries over it are correct.
+
+---
+
 ## 4. Definition of done (SDK surface)
 
 - [ ] Mocked SDK tests pass under `pytest` (backend patched).

@@ -2,8 +2,11 @@
 
 The two dataflow levels: **native dependence graphs** built from the language's own AST in the
 analyzer's own ecosystem — **level 3 intraprocedural** (CFG, DFG, PDG per function) and **level 4
-interprocedural** (the whole-program SDG, plus client queries: slicing, taint). This file is the
-**contract** (what the graphs are, how they're keyed, emitted, and verified). The construction
+interprocedural** (the whole-program SDG). The analyzer is a **pure graph provider**: it emits
+this dependence-graph substrate and stops. Client analyses (slicing, taint, reachability) are
+reachability *queries* over the emitted graph and live in the **frontend SDK**
+(`cldk-sdk-frontend`), not here — see § Provider/client boundary. This file is the **contract**
+(what the graphs are, how they're keyed, emitted, and verified). The construction
 method lives in `dataflow-construction.md`; the per-language engine decisions in
 `dataflow-substrate-menu.md`; the issue template for planning the work in
 `dataflow-issue-template.md`.
@@ -28,7 +31,7 @@ the whole-program summary fixpoint.
 | 1 | Symbol table + resolver call graph | tree to `function` depth + `calls` edges | Cheap, AST + resolver | `-a 1` / `-a 2` (default 1) |
 | 2 | Framework-based call-graph enrichment (Joern/WALA) | more `calls` edges (provenance-merged) | Heavy, external | own toggle, off by default |
 | **3** | **Native intraprocedural graphs (CFG / DFG / PDG per function)** | tree *below* `function` + within-function edges | Heavy but **AST-only, per-callable parallel** | `-a 3` (+ `--graphs`) |
-| **4** | **Native interprocedural graph (SDG) + clients (slicing, taint)** | cross-function `PARAM_*` / `SUMMARY` edges | Heaviest: **needs the points-to oracle** + summary fixpoint | `-a 4` |
+| **4** | **Native interprocedural graph (SDG)** — the substrate clients query | cross-function `PARAM_*` / `SUMMARY` edges | Heaviest: **needs the points-to oracle** + summary fixpoint | `-a 4` |
 
 `-a 3` implies `-a 2`'s resolver call graph; `-a 4` implies `-a 3` (the SDG stitches L3's PDGs).
 The framework toggle stays orthogonal — its edges merge into the call graph with provenance,
@@ -39,6 +42,22 @@ substrate (`dataflow-substrate-menu.md`) lands.
 The levels gate the **JSON path only**. When the output target is the graph (`--emit neo4j`),
 levels don't apply: the analyzer runs at maximum implemented depth and projects the **full SDG**
 unconditionally (`neo4j-projection.md § Depth rule`).
+
+## Provider/client boundary (non-negotiable)
+
+The analyzer is a **pure graph provider**: levels 3–4 emit the universal dependence graph — CFG,
+PDG, the SDG, and the transitive `SUMMARY` edges — and *stop there*. **Client analyses (taint,
+slicing, reachability) are NOT analyzer concerns** — they are reachability queries run in the
+**frontend SDK** over the emitted graph (`cldk-sdk-frontend`). The analyzer never emits a
+`taint_flows` section, never ingests a sources/sinks/sanitizers policy, and never runs a slice.
+
+Rationale: a taint result is keyed on a *policy* (which APIs are sources/sinks) that evolves at
+SDK speed; baking it into the graph would couple the universal artifact to one policy and force a
+re-emit on every model-pack edit. What *does* stay analyzer-side is **policy-agnostic substrate** —
+`SUMMARY` edges are keyed on data dependence, not on any taint config, so they belong in the graph
+and are exactly what make the frontend's queries context-sensitive. This is Joern's factoring: the
+CPG stores the dependence substrate; `reachableBy` is a query, not materialized all-pairs taint
+edges.
 
 ## The graph ladder (definitions and edge vocabulary)
 
@@ -59,7 +78,7 @@ Each graph builds on the previous. Graphs **1–3 are level 3** (per-function, A
    together at call sites via `CALL`, `PARAM_IN`, `PARAM_OUT`, and transitive `SUMMARY` edges
    (Horwitz–Reps–Binkley). Global/module state is modeled as extra parameters. This is the first
    rung that needs the points-to oracle and the interprocedural summary fixpoint, and the graph
-   client analyses (slicing, taint) query.
+   the **frontend SDK's** client analyses (slicing, taint) query — the analyzer only produces it.
 
 ## Node identity (the invariant that makes everything joinable)
 
@@ -113,14 +132,15 @@ SDG) and their level assignment are unchanged, only their placement:
         "target": { "signature": "...", "node": 0 },
         "type": "PARAM_IN", "var": "arg0" }
     ]
-  },
-  "taint_flows": [ ... ]                 // LEVEL 4 client-analysis output, see below
+  }
+  // NO `taint_flows` — client analyses (taint, slicing) are a FRONTEND SDK concern, not an
+  // analyzer output. The analyzer emits only the graph above. See § Client analyses below.
 }
 ```
 
-- The **level split is a data split**: `-a 3` emits `functions` (CFG/PDG) and *omits* `sdg_edges`
-  and `taint_flows`; `-a 4` adds them. `max_level` declares which was populated so a consumer
-  reads it instead of sniffing for `sdg_edges`.
+- The **level split is a data split**: `-a 3` emits `functions` (CFG/PDG) and *omits* `sdg_edges`;
+  `-a 4` adds them. `max_level` declares which was populated so a consumer reads it instead of
+  sniffing for `sdg_edges`.
 - `--graphs cfg,dfg,pdg,sdg` further scopes *within* the requested level (default: all rungs at or
   below the level). `sdg` requires `-a 4`; requesting it at `-a 3` is a flag error. DFG is emitted
   *as* the `DDG` edges of the PDG — there is no separate `dfg` section; requesting `dfg` without
@@ -135,18 +155,26 @@ SDG) and their level assignment are unchanged, only their placement:
 - `program_graphs.schema_version` is versioned independently of the top-level schema and bumps
   additively, like `schema.neo4j.json`.
 
-## Client analyses are queries, not engines
+## Client analyses live in the frontend, not the analyzer
 
-Slicing and taint are **reachability queries over the SDG**, not separate analyses:
+Slicing and taint are **reachability queries over the SDG**, not separate analyses — and they run
+in the **frontend SDK** (`cldk-sdk-frontend`), never in the analyzer. The analyzer's job ends at
+emitting the graph substrate; the SDK loads it and answers queries against it:
 
 - **Backward slice** of `(signature, node)`: reverse reachability over `CDG ∪ DDG ∪ PARAM_* ∪
   SUMMARY` (context-sensitive via the two-phase HRB traversal — up then down).
 - **Taint**: seed at *sources*, propagate labeled reachability along dependence edges, block at
   *sanitizers* on the path, report when a source label reaches a matching *sink*. Sources, sinks,
   sanitizers, and library models are **data, not code** — a JSON spec validated against a JSON
-  Schema, with precedence *built-in pack < config file < inline flags*. Output is the
-  `taint_flows` section: `{ source, sink, rule, sanitized, path }`, each path a list of
-  `(signature, node_id)` pairs, with the matching model id for explainability.
+  Schema, with precedence *built-in pack < config file < inline flags*. The result is a
+  `taint_flows` structure — `{ source, sink, rule, sanitized, path }`, each path a list of
+  `(signature, node_id)` pairs with the matching model id for explainability — **produced and
+  owned by the SDK**, not written into the analyzer's `analysis.json`.
+
+The `SUMMARY` edges the analyzer emits are keyed on data dependence and are reusable across *every*
+taint policy, so they are graph substrate and belong in the analyzer. Keeping the query (and its
+`taint_flows` output) in the SDK means a policy edit re-runs a cheap traversal instead of
+re-emitting the whole universal graph.
 
 ## Cross-language parity clause
 
@@ -158,8 +186,10 @@ additive.**
   `yield_resume` CFG-edge kinds) — recorded in `SCHEMA_DECISIONS.md` like any schema expansion —
   but may not rename or repurpose the shared ones.
 - The SDK models this section **once** (`ProgramGraphs`, `FunctionGraphs`, `GraphNode`,
-  `GraphEdge`, `SDGEdge`, `TaintFlow` — shared across languages, not per-`<L>` copies), which is
-  only possible if the analyzers hold the parity line.
+  `GraphEdge`, `SDGEdge` — shared across languages, not per-`<L>` copies), which is only possible
+  if the analyzers hold the parity line. The `TaintFlow` / slice-result models are **not** here:
+  they are client-analysis outputs owned by the frontend SDK, not part of the graph the analyzer
+  emits.
 
 ## Precision posture (shared, non-negotiable)
 
@@ -178,12 +208,16 @@ Each rung has a gate; do not build the next rung until the current one passes:
 | 3 | Dominance | Post-dominator tree well-formed (unique root = EXIT; infinite loops handled via synthetic edge) |
 | 3 | PDG | CDG edges match hand-computed control dependence on the fixture; every DDG edge connects a real def to a real use of the same access path |
 | 4 | SDG | No dangling `(signature, node_id)` endpoints; PARAM_IN/OUT arity matches the callable's parameters; SUMMARY edges exist for at least one transitive flow in the fixture |
-| 4 | Slice | Backward slice of a named fixture variable equals the hand-computed expected node set — **exact**, not "non-empty" |
-| 4 | Taint | One known source→sink flow found; the same flow with a sanitizer on the path is reported `sanitized` |
+
+The **Slice** and **Taint** gates are **frontend gates**, not analyzer gates — they exercise the
+SDK's queries over the emitted graph and live in `cldk-sdk-frontend`'s testing reference
+(`sdk-testing.md § 3b`): a backward slice of a named criterion equals the hand-computed node set
+exactly; one known source→sink flow is found and its sanitizer-interposed variant reported
+`sanitized`. The backend proves the graph is correct; those prove the SDK's queries over it are.
 
 The **L3/L4 gate boundary** is the intraprocedural backward-slice: it is checkable *within* a
-single function (level 3 done), whereas the SDG/Slice/Taint gates need whole-program stitching
-(level 4). Ship L3 when its three gates pass; L4 waits on the oracle.
+single function (level 3 done), whereas the SDG gate needs whole-program stitching (level 4). Ship
+L3 when its three gates pass; L4 waits on the oracle.
 
 The fixture minimums that make these gates meaningful (branches, loops, exception paths,
 closures, aliasing, recursion, a multi-file flow) are specified in

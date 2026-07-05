@@ -55,6 +55,36 @@ of the facade's *query surface* (the SDK-side mirror of the backend's schema des
 that one approved surface into each target SDK. One facade vocabulary feeds every SDK encoding, so
 the SDKs stay in lockstep.
 
+## Client analyses (slicing, taint) are the SDK's job, not the analyzer's
+
+The `codeanalyzer-<lang>` backend is a **pure graph provider**: at `-a 3`/`-a 4` it emits the
+dependence-graph substrate — the CPG's intra-callable `cfg`/`cdg`/`ddg`/`summary` edges plus the
+cross-callable `param_in`/`param_out` (the SDG), with transitive `SUMMARY` edges — and nothing
+more. It deliberately does **not** emit a `taint_flows` section or run a slice
+(`codeanalyzer-backend`'s `dataflow-graphs.md § Provider/client boundary`). **Slicing, taint, and
+reachability queries live here, in the SDK**, as part of the facade's query surface:
+
+- **Backward/forward slice** and **taint** are reachability walks over the emitted graph —
+  `cdg ∪ ddg ∪ param_in ∪ param_out ∪ summary` — computed in-SDK. The `SUMMARY` edges the analyzer
+  ships are what make these **context-sensitive** (the two-phase HRB up-then-down traversal)
+  without the SDK re-descending into callees.
+- **Sources/sinks/sanitizers/library models are data, not code** — a JSON spec validated against a
+  JSON Schema, precedence *built-in pack < config file < caller-supplied* — and they live with the
+  SDK because they're a *policy* that changes far faster than the graph. This is why they aren't in
+  the analyzer: a policy edit re-runs a cheap in-SDK traversal instead of forcing a graph re-emit.
+- The **`TaintFlow` / slice-result models** (`{ source, sink, rule, sanitized, path }`, paths as
+  `can://…@line:col` node-id lists with model ids) are SDK models — the shared CPG graph models
+  (`cldk/models/cpg/`: `Node`/`Edge`, and the SDG edge shapes) come from the backend contract; the
+  client-result models are added here.
+- Surface these as facade methods in the query-surface design loop (e.g. `get_backward_slice(...)`,
+  `get_taint_flows(spec=...)`), and gate them with the **Slice** and **Taint** frontend gates from
+  `sdk-testing.md § 3b` (exact expected node set for a slice; one source→sink flow found and the
+  same flow reported `sanitized` with a sanitizer interposed) over the analyzer's fixture graph.
+
+Over-approximations inherited from the graph (e.g. ENTRY-anchored `param_in` collapsing argument
+arity, missing `summary` edges before that analyzer PR lands, heap flows only under the analyzer's
+heap-dependence mode) must be **surfaced in the SDK's results**, not silently absorbed.
+
 ## Precondition & inputs (what the backend skill hands you)
 
 Do not start until a **working, schema-conformant `codeanalyzer-<lang>`** exists. You need, from the

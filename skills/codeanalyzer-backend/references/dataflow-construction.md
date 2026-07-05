@@ -165,18 +165,22 @@ Stitch the PDGs with the interprocedural edges (Horwitz–Reps–Binkley):
 `(signature, node_id)` endpoints, arity match, at least one SUMMARY edge for a known transitive
 flow, and the whole `program_graphs` section validates against the SDK models.
 
-## Stage 8 — Clients and the CPG · Level 4
+## Stage 8 — The CPG (the analyzer's last dataflow stage) · Level 4
 
-- **Slicing and taint** as SDG queries (`dataflow-graphs.md § Client analyses`) — the two-phase
-  HRB traversal for context-sensitive slices; labeled reachability with sanitizer blocking for
-  taint; witness paths reconstructed lazily over reverse edges.
 - **CPG:** project the new node/edge families through the existing `neo4j/` subpackage —
   new labels in the schema catalog, same `RowBuilder`/writer machinery, additive
   `schema.neo4j.json` version bump. The deferred-edge gate already enforces no-dangling.
 
-**Client gate:** the slice and taint assertions from `dataflow-graphs.md § Verification gates`,
-plus: the Cypher snapshot with graphs enabled loads clean into an empty Neo4j and a
-`MATCH (:CFGNode)` count equals the JSON node count.
+**Slicing and taint are NOT an analyzer stage.** They are reachability queries over the emitted
+SDG and live in the **frontend SDK** (`cldk-sdk-frontend`), per the provider/client boundary in
+`dataflow-graphs.md`. The analyzer's dataflow work ends when the SDG (with its `SUMMARY` edges) and
+the CPG are emitted; do not build a slicer or a taint engine here, and do not emit a `taint_flows`
+section. The two-phase HRB slice traversal, labeled taint reachability with sanitizer blocking,
+lazy witness reconstruction, and the sources/sinks/sanitizers model packs are all the SDK's job.
+
+**CPG gate:** the Cypher snapshot with graphs enabled loads clean into an empty Neo4j and a
+`MATCH (:CFGNode)` count equals the JSON node count. (The slice/taint gates are frontend gates —
+`cldk-sdk-frontend`.)
 
 ---
 

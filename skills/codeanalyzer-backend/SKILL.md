@@ -54,8 +54,9 @@ Either way the target is identical: an analyzer whose output validates against
 
 - Confirm the **target language** and locate the CLDK reference repos (read-only; prefer a local
   sibling checkout, else clone into `/tmp` from `github.com/codellm-devkit/<repo>`):
-  `codeanalyzer-java` (WALA — already ships L3/L4 via its slicer, the worked example of the full
-  ladder), `codeanalyzer-python`, `codeanalyzer-typescript`, and `python-sdk` (the SDK your output
+  `codeanalyzer-java` (WALA — already ships the L3/L4 dependence-graph substrate, the worked
+  example of the full ladder), `codeanalyzer-python`, `codeanalyzer-typescript`, and `python-sdk`
+  (the SDK your output
   must validate against). For an existing-analyzer migration, its own repo is the primary anchor.
 - **Read the keystone first**, then the rest:
   - `references/canonical-schema.md` — **the v2 model.** The tree, the id grammar, the additive
@@ -91,7 +92,7 @@ build/dep materialization, packaging) and — **if L3/L4 are in scope** —
 `references/dataflow-substrate-menu.md` (CFG source, def-use source, points-to oracle). Pre-fill a
 recommendation per slot and confirm (`AskUserQuestion` for load-bearing ones). Ask the **target
 depth** (`max_level`): L1–2 (symbol table + call graph, the default floor), L3 (intraprocedural
-dataflow), or L4 (interprocedural SDG + taint). Record the locked decisions under an **Architecture
+dataflow), or L4 (interprocedural SDG). Record the locked decisions under an **Architecture
 & Tooling** heading in the analyzer's `README.md`, and keep schema decisions in `.claude/
 SCHEMA_DECISIONS.md`. **Then verify the toolchain is installed** (parser, resolver, the points-to
 oracle if L4, plus the packaging/release toolchain) — if anything required is missing, stop and
@@ -154,8 +155,12 @@ Add the **synthetic parameter vertices** (`formal_in/out`, `actual_in/out`) to `
 cross-function `param_in`/`param_out` edge lists, the intra-caller `summary` edges, and the
 **semantic** (alias-aware) `ddg` edges (`prov:["points-to"]`) — the whole-program SDG. Needs the
 points-to oracle from the substrate menu + the summary fixpoint (stages 5–8 of
-`dataflow-construction.md`). `-a 4`. **Gate:** no dangling SDG endpoints; a known source→sink taint
-flow is found and its sanitized variant reported sanitized.
+`dataflow-construction.md`). `-a 4`. **Gate:** no dangling SDG endpoints; PARAM_IN/OUT arity
+matches; `summary` edges exist for a known transitive flow. **Provider/client boundary:** this
+skill builds the *graph* only — slicing and taint are reachability *queries* over it and belong to
+the **frontend SDK** (`cldk-sdk-frontend`). Do not build a slicer or taint engine here and do not
+emit a `taint_flows` section; `summary` edges are the policy-agnostic substrate the frontend's
+context-sensitive queries consume (their slice/taint gates live in `cldk-sdk-frontend`).
 
 ### Neo4j projection (co-primary, always full-depth)
 The Neo4j graph is not an afterthought — it's the **second required projection**
