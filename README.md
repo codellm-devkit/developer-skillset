@@ -1,4 +1,6 @@
-# cldk-forge
+# cldk-devtools
+
+> Formerly cldk-forge. Now being remodeled into a mode ladder — see [the epic](https://github.com/codellm-devkit/cldk-forge/issues/13) for progress.
 
 The forge where [CodeLLM-DevKit (CLDK)](https://github.com/codellm-devkit) gets built: a
 [Claude Code](https://claude.com/claude-code) **plugin** of agent skills for extending CLDK —
@@ -8,8 +10,8 @@ analysis levels: symbol table, call graph, and native dataflow.
 ## Install
 
 ```
-/plugin marketplace add codellm-devkit/cldk-forge
-/plugin install cldk-forge@codellm-devkit
+/plugin marketplace add codellm-devkit/cldk-devtools
+/plugin install cldk-devtools@codellm-devkit
 ```
 
 Then just describe the task — *"add Rust support to CLDK"*, *"build a codeanalyzer for Kotlin"*,

@@ -6,9 +6,9 @@
   },
   "plugins": [
     {
-      "name": "cldk-forge",
+      "name": "cldk-devtools",
       "source": ".",
-      "description": "Build a language's backend analyzer (codeanalyzer-<lang>), wire it into the CLDK frontend SDKs, and grow it through the analysis levels."
+      "description": "Mode ladder for CLDK development: design → backend analyzer → frontend SDK → finishing, with a dedicated maintenance mode and a session dispatcher."
     }
   ]
 }
