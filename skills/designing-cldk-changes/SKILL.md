@@ -13,7 +13,7 @@ shared contract or spans repos — is designed here, as a spec plus a GitHub epi
 ## Entry Preconditions
 
 You are here because the work is structural: a new language, schema v2
-evolution/migration, a new analysis level (L3/L4), a new SDK facade surface, or
+evolution/migration, a new analysis level (L2/L3/L4), a new SDK facade surface, or
 any cross-repo feature. If it arrived as a "small fix" that turned out to move
 the schema v2 output or the public SDK API, **maintaining-cldk**'s contract gate
 escalated it here — say so and continue; it is now a structural change, not a fix.
@@ -32,7 +32,7 @@ Then state the change-type → repos-affected mapping:
 | --- | --- | --- | --- |
 | New language | new `codeanalyzer-<lang>` | `python-sdk` (+ TS SDK) | docs |
 | Schema v2 evolution / migration | every affected `codeanalyzer-*` | every affected SDK | docs |
-| New analysis level (L3/L4) | that `codeanalyzer-<lang>` | SDK only if the surface changes | docs |
+| New analysis level (L2/L3/L4) | that `codeanalyzer-<lang>` | SDK only if the surface changes | docs |
 | New facade surface / SDK feature | — | `python-sdk` (+ TS SDK) | docs |
 | Docs-only structural change | — | — | docs |
 

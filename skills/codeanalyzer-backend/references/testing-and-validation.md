@@ -66,8 +66,8 @@ Run each level's gate on the fixture; do not build the next level until the curr
    non-eager run.
 
 ### L2 — call-graph gate (`-a 2`)
-1. Every edge endpoint matches a real signature — `for e in call_graph: assert e.src in all_sigs and
-   e.dst in all_sigs` (no dangling).
+1. Every edge endpoint matches a real `can://` id — `for e in call_graph: assert e.src in all_ids and
+   e.dst in all_ids` (no dangling).
 2. Every edge has a **non-empty `prov`** naming the resolver.
 3. **`callee` backfilled** (non-null id) on resolved sites; still `null` on honest-unresolved ones.
 4. A **named expected edge** present (exact `(src, dst)`), plus at least one **cross-package** edge.

@@ -58,7 +58,7 @@ application                                   ← the root; carries an id
     module: { types{}, functions{} }          ← L1  (per-file / compilation-unit container)
       type: { callables{}, fields{} }         ← L1
         callable: { body{}, cfg[], cdg[], ddg[], summary[] }
-          body: { <local-id>: node }          ← L3+ (statements, then synthetic vertices)
+          body: { <local-id>: node }          ← L1: call nodes; completes at L3
   call_graph[], param_in[], param_out[]       ← cross-function edges, at the application scope
 ```
 
@@ -77,17 +77,18 @@ application → file/module → type (class|struct|interface|enum|…) → calla
             → statement (statement|call|return|branch|loop|…) → [expression, opt]
 ```
 
-plus the **synthetic** vertices introduced at L4: `entry`, `exit`, `formal_in`, `formal_out`,
-`actual_in`, `actual_out`. A node is therefore *either an AST region or a synthetic analysis
-vertex*; both fit the tree (synthetic vertices are children of the callable or of a call-site
-statement).
+plus the **synthetic** vertices: `entry`/`exit` introduced at L3, and `formal_in`/`formal_out`/
+`actual_in`/`actual_out` introduced at L4. A node is therefore *either an AST region or a
+synthetic analysis vertex*; both fit the tree (synthetic vertices are children of the callable or
+of a call-site statement).
 
 ## Identity
 
 Two tiers, and the boundary is the **callable leaf line** — the same line where L1 stops.
 
 - **Durable ids (≥ callable)** — files, modules, types, callables get stable
-  `cldk://`-style URIs (grammar in `skills/cldk-sdk-frontend/references/schema-contract.md`) that
+  `can://` URIs (an extension of the upstream `cldk://` RFC grammar; grammar in
+  `skills/cldk-sdk-frontend/references/schema-contract.md`) that
   survive re-analysis and are what external tools (SCIP export, cross-repo joins) address. The grammar
   is a **containment path** with an application segment so multiple apps in one language don't
   collide:
@@ -214,6 +215,7 @@ Building **both** is a first-class deliverable for every analyzer, not an aftert
 ```jsonc
 {
   "schema_version": "2.0.0", "language": "go", "max_level": 4, "k_limit": 3,
+  "analyzer": { "name": "codeanalyzer-go", "version": "1.4.0" },
   "application": {
     "id": "can://go/myapp", "kind": "application",
     "symbol_table": {
@@ -228,7 +230,7 @@ Building **both** is a first-class deliverable for every analyzer, not an aftert
               "Hash(string)uint64": {
                 "id": "can://go/myapp/src/util.go/Hasher/Hash(string)uint64", "kind": "method",
                 "span": { "start":[14,1], "end":[22,1], "bytes":[42,180] },
-                "body": {                                                          // L3+
+                "body": {                                                 // L1: call nodes; completes at L3
                   "@entry": { "kind":"entry" },
                   "15:2":   { "kind":"statement", "span":{ "start":[15,2],"end":[15,18],"bytes":[84,100] } },
                   "16:2":   { "kind":"call", "span":{...}, "callee":"can://go/myapp/src/fnv.go/New64()" },

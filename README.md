@@ -24,8 +24,9 @@ the dispatcher automatically (see [How the hook behaves](#how-the-hook-behaves) 
 
 The diagram and routing table below are copied verbatim from the dispatcher skill,
 [`using-cldk-devtools`](skills/using-cldk-devtools/SKILL.md) — the same ones an agent reads
-before acting on any codellm-devkit repo. Keep the two in sync; the consistency check in
-`tests/` diffs them.
+before acting on any codellm-devkit repo. Keep the two in sync;
+[`tests/consistency/check-readme-dispatcher-sync.sh`](tests/consistency/check-readme-dispatcher-sync.sh)
+diffs them.
 
 ```
                      using-cldk-devtools  (dispatcher)
@@ -158,6 +159,7 @@ tests/
   scenarios/               # per-skill prompts used to test routing and gates
   baselines/               # RED (no-skill) vs. GREEN (with-skill) evidence, ladder dry-runs
   hooks/                   # hook behavior tests
+  consistency/             # README/dispatcher-skill sync checks
 ```
 
 ## How the hook behaves

@@ -63,7 +63,7 @@ source node's props.
 Run the analyzer at `-a 2` on the fixture and confirm all of:
 
 - **No dangling endpoints** — every edge `src` and `dst` resolves to a real callable id in the symbol
-  table (`for e in call_graph: assert e.src in all_sigs and e.dst in all_sigs`);
+  table (`for e in call_graph: assert e.src in all_ids and e.dst in all_ids`);
 - every edge has a **non-empty `prov`** naming the resolver;
 - **`callee` is backfilled** (non-null id) on successfully resolved call sites, and still `null` on
   the honest-unresolved ones;
