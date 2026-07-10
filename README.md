@@ -46,7 +46,6 @@ before acting on any codellm-devkit repo. Keep the two in sync; the consistency 
 
 ## Routing
 
-```
 | Work type | Entry point | Path |
 | --- | --- | --- |
 | New language for CLDK | designing-cldk-changes | design → backend → frontend → finishing |
@@ -57,7 +56,6 @@ before acting on any codellm-devkit repo. Keep the two in sync; the consistency 
 | Small feature, no contract impact | maintaining-cldk | maintain → finishing |
 | Docs gap / README / agent-guide update | maintaining-cldk | maintain → finishing (docs path) |
 | Issue triage ("is this real?") | maintaining-cldk | maintain (may stop at triage verdict) |
-```
 
 ## Skills
 
