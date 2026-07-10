@@ -54,15 +54,17 @@ For every divergence (step 1) and every new language concept (step 2), present i
 use `AskUserQuestion`. Don't batch a whole node into one vague question; ask per real decision,
 with a recommended default first. Use this shape:
 
-> **`callable.decorators`/annotations.** In **Java** these are flat strings
-> (`annotations: List[str]` + `modifiers`). In **Python** they are structured `PyDecorator`
-> objects (name, qualified_name, positional/keyword args). TypeScript has decorators that carry
-> arguments (`@Component({selector: '...'})`).
-> *How do you want to model TS decorators?*
-> 1. **Structured `TSDecorator` (recommended)** — like Python; preserves args so entrypoint
->    finders can read `@Get('/path')` later. Costs a richer model.
-> 2. **Flat strings** — like Java; simplest, but throws away argument structure.
-> 3. **Structured + raw fallback** — structured fields plus the raw source string.
+> **Rust lifetime parameters.** Neither **Java** nor **Python** has a reference precedent —
+> lifetimes are a Rust-only construct (`fn longest<'a>(x: &'a str, y: &'a str) -> &'a str`). The
+> rubric (`references/canonical-schema.md` § Language expansion) offers three shapes for anything
+> with no precedent: a new typed field, folding it into an existing field, or an open-vocab `tags`
+> entry.
+> *How do you want to model lifetime parameters on `callable`?*
+> 1. **Typed field `lifetimes: LifetimeParam[]` (recommended)** — `{ name, bounds[] }` per
+>    callable; preserves borrow-checker-relevant structure for later dataflow work.
+> 2. **Fold into `parameters`** — attach a `lifetime` string to each `param` that borrows;
+>    cheaper, but loses signature-level lifetime bounds (`'a: 'b`).
+> 3. **Open-vocab `tags`** — `tags: ["lifetime:'a"]`; zero schema cost, but not machine-queryable.
 
 Always include *why* each option exists and what it buys/costs, anchored in what the references
 did. When the language adds something with no reference precedent (TS generics, Go receiver types,

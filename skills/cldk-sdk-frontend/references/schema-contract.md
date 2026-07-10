@@ -27,7 +27,8 @@ callers are unchanged.
 ## The schema shape the models load
 
 - **Root is an envelope, not `Application`.** `{ schema_version, language, max_level,
-  k_limit?, application }`. `max_level` is authoritative — read it; never sniff for keys.
+  k_limit?, analyzer{name,version}, application }`. `max_level` is authoritative — read it;
+  never sniff for keys.
 - **`application`** = `{ id: can://<lang>/<app>, kind, symbol_table{path→module},
   call_graph[], param_in[], param_out[] }`. `symbol_table` and `call_graph` live
   **inside** `application`.
@@ -101,8 +102,12 @@ class Application(_NullSafeBase):
     id: str; kind: Literal["application"]="application"
     symbol_table: Dict[str, Module]; call_graph: List[Edge]=[]; param_in: List[Edge]=[]; param_out: List[Edge]=[]
 
+class Analyzer(_NullSafeBase):
+    name: str; version: str
+
 class AnalysisPayload(_NullSafeBase):   # the envelope / manifest — .application is the tree
-    schema_version: str; language: str; max_level: int; k_limit: Optional[int]=None; application: Application
+    schema_version: str; language: str; max_level: int; k_limit: Optional[int]=None
+    analyzer: Optional[Analyzer]=None; application: Application
 ```
 
 Prefer a single `Node` with a **string** `kind` over per-language subclasses or a rigid

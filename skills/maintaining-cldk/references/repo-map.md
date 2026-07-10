@@ -3,15 +3,14 @@
 Where a fix lands, and what pins to what. Enumerated live via
 `gh repo list codellm-devkit --limit 100 --json name,description` (27 returned,
 25 after excluding the two org-meta repos `.github` / `.github-private`). Facts below
-are evidenced from that enumeration plus local checkouts under
-`/Users/rkrsn/workspace/codellm-devkit/`; anything not directly checked is
-marked **verify per repo**.
+are evidenced from that enumeration plus a local sibling checkout of the org's repos,
+if present; anything not directly checked is marked **verify per repo**.
 
 ## Tier 1 — SDKs (frontend)
 
 | Repo | Owns | Evidence |
 | --- | --- | --- |
-| `python-sdk` | The `cldk` PyPI package — the public Python facade (`CLDK(language=...).analysis(...)`). Wires Java, Python, C, and TypeScript backends today (`cldk/analysis/{java,python,c,typescript}`); no Go/Rust wiring yet. | Checked out; `cldk/analysis/` listing. |
+| `python-sdk` | The `cldk` PyPI package — the public Python facade. Canonical surface today is the `CLDK.<lang>(project_path=..., backend=...)` factory, with the legacy `CLDK(language=...).analysis(...)` retained as a compat shim. Wires Java, Python, C, and TypeScript backends today (`cldk/analysis/{java,python,c,typescript}`); no Go/Rust wiring yet. | Checked out; `cldk/analysis/` listing. |
 | `typescript-sdk` | The `@codellm-devkit/cldk` npm package — the TS/JS facade. | No local checkout — **verify per repo**. |
 
 ## Tier 2 — Analysis backends (`codeanalyzer-<lang>`)
@@ -34,7 +33,7 @@ checks.
 | `codeanalyzer-java` | Java, via WALA + JavaParser. Has its own Neo4j `SchemaCatalog` (`SCHEMA_VERSION` constant, currently `1.1.0` in the local checkout) — **verify per repo** whether this has moved to schema v2 by the time you're reading this. | Checked out. |
 | `codeanalyzer-python` | Python, via Jedi + Tree-sitter (+ `codeanalyzer-codeql` for deeper dataflow). Local checkout's `codeanalyzer/core.py` gates its analysis cache on `schema_version == "2.0.0"` — already on schema v2. | Checked out. |
 | `codeanalyzer-typescript` | TypeScript/JavaScript, via ts-morph + Jelly. One repo, multiple in-flight branches: the `main`-tracking checkout sits on `feat/issue-2-program-graphs`; a second worktree of the **same repo** sits on `fix/issue-46-bolt-symbol-labels`, which is where the schema-v2 additive-CPG emitter + Neo4j v2 projection work is landing (`PROGRAM_GRAPHS_SCHEMA_VERSION` in `src/schema/graphs.ts`). Do not mistake the two worktrees for two repos. | Checked out (two worktrees, one `origin`). |
-| `codeanalyzer-go` | Go. **In development** per the org description; the local checkout of `main` is a near-empty stub (`LICENSE`, `README.md` only) — the working analyzer, if any, lives on a feature branch/PR, not `main`. This is also the scenario dry-run cwd: treat anything you find here as real repo state, not an answer key. | Checked out. |
+| `codeanalyzer-go` | Go. **In development** per the org description; the local checkout of `main` is a near-empty stub (`LICENSE`, `README.md` only) — the working analyzer, if any, lives on a feature branch/PR, not `main`. | Checked out. |
 | `codeanalyzer-rust` | Rust, via the Rust compiler's IR. **In development**; local checkout has no source tree yet (just `docs/`, `.devcontainer/`). | Checked out. |
 | `codeanalyzer-kotlin`, `codeanalyzer-swift`, `codeanalyzer-dotnet`, `codeanalyzer-abap` | Kotlin / Swift / .NET / ABAP backends. All **in development**; local checkouts are empty (git metadata only, no source). | Checked out. |
 | `codeanalyzer-clang` | C/C++ family. Has a `CLAUDE.md` and `docs/` but no visible source tree in the checkout — **verify per repo** for current depth. | Checked out. |
@@ -45,7 +44,7 @@ checks.
 
 | Repo | Owns | Evidence |
 | --- | --- | --- |
-| `cldk-devtools` | This plugin — the skills that extend/maintain CLDK itself (this repo, worked in as a git worktree). Note: this repo was renamed from `cldk-forge` (`gh repo view codellm-devkit/cldk-forge` redirects to `cldk-devtools`) — a local checkout still pointing at the old `cldk-forge` remote is this same repo, pre-rename, not a distinct one. | Checked out (this worktree); `git remote`/`gh repo view` redirect confirmed. |
+| `cldk-devtools` | This plugin — the skills that extend/maintain CLDK itself (this repo). Note: this repo was renamed from `cldk-forge` (`gh repo view codellm-devkit/cldk-forge` redirects to `cldk-devtools`) — a local checkout still pointing at the old `cldk-forge` remote is this same repo, pre-rename, not a distinct one. | Checked out (`cldk-devtools`, this repo); `git remote`/`gh repo view` redirect confirmed. |
 | `cocoa` | COCOA (Code Context Agent) — the Python implementation + MCP toolbox server wrapping CLDK for coding agents. | Checked out. |
 | `cocoa-mcp` | A second COCOA/MCP repo; its `gh` description text says "Python Implementation" but `primaryLanguage` reports Java in the enumeration — **verify per repo** which is authoritative before treating this as pure-Python. | Checked out; description/language mismatch observed directly. |
 | `cocoa-ts` | The TypeScript implementation of COCOA + its MCP server. | No local checkout — **verify per repo**. |
