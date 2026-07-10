@@ -64,7 +64,8 @@ application                                   ← the root; carries an id
 
 - **Above the callable**: name-keyed maps (`types`, `functions`, `callables`) — each node
   carries its full `id`.
-- **At the callable**: `body` is the container that grows at L3+. It is a map keyed by the
+- **At the callable**: `body` is the container that exists from L1 (holding the `call` nodes)
+  and completes at L3. It is a map keyed by the
   node's **local id** (a source position `line:col`, or an `@tag` for synthetic vertices).
 - **Edges live at the lowest common ancestor of their endpoints**: intra-callable edges
   (`cfg`/`cdg`/`ddg`/`summary`) hang on the callable; cross-callable edges
