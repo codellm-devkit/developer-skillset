@@ -1,28 +1,35 @@
-# Migrating an existing analyzer to schema v2 (path B)
+# Migrating an existing analyzer/SDK to a new schema major
 
-For a `codeanalyzer-<lang>` that already exists on the **old** schema (flat
+Invoked from `designing-cldk-changes` when the Contract-Impact Triage says the change is a
+**schema major** — an existing `codeanalyzer-<lang>` (and its SDK) must move to a new keystone.
+This doc is the **design-and-staging plan** for that migration: it names the field-by-field deltas,
+the compat/staging posture, and the version lockstep, so the spec and epic capture them and the
+implementation rungs (`codeanalyzer-backend`, `cldk-sdk-frontend`) execute a decided plan rather
+than improvising a breaking change. A schema-major migration is a **coordinated major release
+across repos** — that coordination is exactly what design mode exists to plan.
+
+The worked case below is the canonical one: an analyzer on the **old** schema (flat
 `symbol_table: {path → CompilationUnit}` + a `call_graph` of rich or identity edges, per-callable
-`code`, `is_*` boolean flags). Moving it to the v2 keystone (`canonical-schema.md`) is a
-**major release**: the parsing/resolution guts stay; the *emission layer* is rewritten to produce
-the additive tree + typed edges, in both projections. This is a breaking output change — bump the
-major version and coordinate the SDK release (`§ c`).
+`code`, `is_*` boolean flags) moving to the v2 keystone (`references/canonical-schema.md`). The
+parsing/resolution guts stay; the *emission layer* is rewritten to produce the additive tree +
+typed edges, in both projections.
 
 **Golden rule:** keep everything that *computes* facts (the parser, the resolver, WALA/Jelly/
 go-ssa, the call-graph builder); replace only what *serializes* them. The analyzer already knows
 the facts — v2 is a different shape for the same facts, plus deeper ones at L3/L4.
 
-## Do it level by level, lowest first
+## Stage it level by level, lowest first
 
-Migrate in the same additive order you'd build a new analyzer, so each step is independently
-validatable against the v2 SDK models:
+Migrate in the same additive order you would build a new analyzer, so each step is independently
+validatable against the v2 SDK models — this staging *is* the child-issue breakdown in the epic:
 
-1. **L1 emission** — the tree + `source` + ids. The biggest structural change; do it first and
-   get the symbol-table gate green before touching edges.
+1. **L1 emission** — the tree + `source` + ids. The biggest structural change; do it first and get
+   the symbol-table gate green before touching edges.
 2. **L2 emission** — the `call_graph` list at application scope.
 3. **Neo4j projection** — re-point (or add) the graph emitter at the v2 node/edge families.
 4. **L3/L4** — if the analyzer already computes dataflow (e.g. Java via WALA's slicer, which
-   already emits `program_graphs`), remap it into `body` + the split edge lists; otherwise it's new
-   construction per `dataflow-construction.md`.
+   already emits program graphs), remap it into `body` + the split edge lists; otherwise it is new
+   construction per `skills/codeanalyzer-backend/references/dataflow-construction.md`.
 
 ## Field-by-field: old → v2
 
@@ -60,28 +67,39 @@ validatable against the v2 SDK models:
 | `(signature, node)` pair for graph endpoints (Java) | single string id `…<signature>@<line>:<col>` (or `@tag` for synthetic) |
 | bare `signatureOf()` | unchanged — still the one canonicalizer; it now produces the *last path segment* of the id |
 
-## Practical mechanics
+## Practical mechanics (for the backend rung)
 
 - **Wrap, don't rewrite, the model layer.** If the analyzer builds in-memory model objects then
   serializes, add a **v2 emitter** that walks those same objects and produces the new shape — the
-  cleanest diff, and it lets you keep the old emitter behind a flag during transition if useful.
+  cleanest diff, and it lets you keep the old emitter behind a flag during transition. That flag is
+  the **compat shim** the migration leans on while both schemas coexist.
 - **Byte offsets:** the parser already has token positions; thread the byte/char offset through to
   `span.bytes`. This is the one genuinely new datum L1 needs.
-- **`source`:** you're already reading each file — retain its text on the module node instead of
-  slicing per-callable `code`.
-- **Neo4j:** if the analyzer already has a graph projection (Java/Python/TS do), it's largely a
-  **relabel** to the v2 node/edge families and id scheme; if not, add the `neo4j/` subpackage per
-  `neo4j-projection.md`.
+- **`source`:** you already read each file — retain its text on the module node instead of slicing
+  per-callable `code`.
+- **Neo4j:** if the analyzer already has a graph projection, it is largely a **relabel** to the v2
+  node/edge families and id scheme; if not, add the `neo4j/` subpackage per
+  `skills/codeanalyzer-backend/references/neo4j-projection.md`.
 - **Validate against the SDK v2 models at each level** — the same gates as a new analyzer
-  (`testing-and-validation.md`), plus a **superset check** if you keep the old emitter: v2 output
-  must contain every fact the old output did (modulo the deliberate drops above).
+  (`skills/codeanalyzer-backend/references/testing-and-validation.md`), plus a **superset check** if
+  you keep the old emitter: v2 output must contain every fact the old output did (modulo the
+  deliberate drops above).
 
-## Release & coordination
+## The SDK side migrates in lockstep
+
+A schema major is **also a major SDK release**, planned in the same epic. The `cldk-sdk-frontend`
+rung remaps the Pydantic models to v2 **while keeping every public accessor's name and return type
+identical** — the device that makes API-stability possible is the two-layer model / per-language
+views (`skills/cldk-sdk-frontend/references/schema-contract.md`). So the migration epic has two
+coupled tracks: the analyzer's emission rewrite (backend) and the SDK's model remap (frontend),
+released together.
+
+## Release & coordination (the lockstep the epic tracks)
 
 - **Major version bump** on the analyzer; note the breaking output change in the release notes
   (Keep-a-Changelog *Changed/Breaking*).
-- **Coordinate with the SDK release (`§ c`):** the frontend skill revises the Pydantic models to v2
-  in lockstep, keeping the public API stable. Pin the analyzer version in the SDK only once both
-  are cut. Until then, the SDK's old models won't parse v2 output — don't publish the analyzer's
-  new major as the SDK's pinned version prematurely.
-- Update the repo's **`CLAUDE.md`** to describe the v2 model (it's now what the analyzer emits).
+- **Pin only once both are cut.** The SDK revises its models to v2 in lockstep, keeping the public
+  API stable; pin the analyzer version in the SDK **only once both are released**. Until then, the
+  SDK's old models won't parse v2 output — don't publish the analyzer's new major as the SDK's
+  pinned version prematurely. This ordering constraint is a first-class item on the epic checklist.
+- Update the repo's **`CLAUDE.md`** to describe the v2 model (it is now what the analyzer emits).
