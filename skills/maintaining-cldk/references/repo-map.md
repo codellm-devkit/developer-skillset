@@ -1,8 +1,8 @@
 # Repo map
 
 Where a fix lands, and what pins to what. Enumerated live via
-`gh repo list codellm-devkit --limit 100 --json name,description` (27 repos,
-excluding the two org-meta repos `.github` / `.github-private`). Facts below
+`gh repo list codellm-devkit --limit 100 --json name,description` (27 returned,
+25 after excluding the two org-meta repos `.github` / `.github-private`). Facts below
 are evidenced from that enumeration plus local checkouts under
 `/Users/rkrsn/workspace/codellm-devkit/`; anything not directly checked is
 marked **verify per repo**.
@@ -70,7 +70,9 @@ checks.
   both sides before assuming a fix is already picked up downstream.
 - The Java backend is bundled/downloaded rather than pinned as a plain PyPI
   dependency (no `codeanalyzer-java==` line in `python-sdk`'s
-  `pyproject.toml`) — **verify per repo** for the exact bundling/version
+  `pyproject.toml`). However, `pyproject.toml` lines 89–92 contain a
+  `[tool.backend-versions]` table with `codeanalyzer-java = "2.4.1"`, which is
+  informational only — not consumed by python-sdk code or release.yml (which fetches the latest GitHub release dynamically). Verify the exact bundling/version
   mechanism before assuming a Java-side fix needs a `python-sdk` pin bump the
   same way Python/TypeScript do.
 - `codeanalyzer-go` and `codeanalyzer-rust` have no wiring in `python-sdk`
