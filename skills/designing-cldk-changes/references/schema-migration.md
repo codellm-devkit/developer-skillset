@@ -29,7 +29,8 @@ validatable against the v2 SDK models — this staging *is* the child-issue brea
 3. **Neo4j projection** — re-point (or add) the graph emitter at the v2 node/edge families.
 4. **L3/L4** — if the analyzer already computes dataflow (e.g. Java via WALA's slicer, which
    already emits program graphs), remap it into `body` + the split edge lists; otherwise it is new
-   construction per `skills/codeanalyzer-backend/references/dataflow-construction.md`.
+   construction per `skills/codeanalyzer-backend/references/level-3-intraprocedural-dataflow.md`
+   and `skills/codeanalyzer-backend/references/level-4-interprocedural-sdg.md`.
 
 ## Field-by-field: old → v2
 

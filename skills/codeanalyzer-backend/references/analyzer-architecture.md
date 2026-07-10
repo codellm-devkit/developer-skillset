@@ -1,149 +1,128 @@
-# Analyzer architecture: build it modular (the package skeleton)
+# Analyzer architecture — the modular package skeleton
 
-A `codeanalyzer-<lang>` that *runs* but is one flat pile of files has failed a real
-requirement. CLDK analyzers are maintained and extended for years; the generated analyzer must
-land as a **modular package** that mirrors the structure of the mature reference — not a
-monolith you "clean up later." This is a first-class success criterion, alongside schema
-conformance.
+A `codeanalyzer-<lang>` that *runs* but is one flat pile of files has failed a real requirement.
+CLDK analyzers are maintained and extended for years, so the analyzer must land as a **modular
+package** whose seams mirror the pipeline the schema implies: **parser → resolver → per-level
+builders → emitters**. Modularity is a first-class success criterion, alongside schema conformance.
 
-This reference is built from a side-by-side of the two real analyzers:
+Anchor every "where does this code go?" decision on **`codeanalyzer-python`** (the model to
+replicate: cohesive, pluggable, separated by concern). **`codeanalyzer-ts`'s original flat build**
+is the cautionary counter-example — it validates and runs, yet ships as a monolith; every
+anti-pattern below is taken from it.
 
-- **`codeanalyzer-python` — the model to replicate.** Cohesive, pluggable, separated by concern.
-- **`codeanalyzer-ts` — the cautionary counter-example.** It validates and runs, but it was
-  generated as a flat, monolithic codebase. **Read it to learn what *not* to ship.** Every
-  anti-pattern below is taken from it verbatim.
+## The pipeline, and the package that mirrors it
 
-Anchor on the Python package every time you decide where code goes. When in doubt, open the
-sibling file in `codeanalyzer-python/codeanalyzer/` and put the equivalent in the same place.
-
-## The package layout to replicate
-
-`codeanalyzer-python/codeanalyzer/` is organized by concern, one subpackage per phase, plus a
-pluggable extension layer. Reproduce this shape in the target language's idiom (a Python
-package, a TS `src/` tree, a Go module, Rust crates/modules):
+The additive schema (`skills/designing-cldk-changes/references/canonical-schema.md`) is grown by a
+straight pipeline. Each stage is a subpackage with a real boundary:
 
 ```
 codeanalyzer/
-  __main__.py            # CLI entry: parse args -> build options -> call core. Thin.
-  core.py                # ORCHESTRATOR ONLY. Delegates every phase; inlines no analysis logic.
-  options/               # CLI option / AnalysisOptions model
-  config/                # static / environment config, distinct from CLI options
-  schema/                # the node/edge models — the v2 data contract (canonical-schema.md)
-  syntactic_analysis/    # L1: the tree builder (per-file, to callable depth) + call nodes
-  semantic_analysis/     # L2: call graph; L3/L4: the dataflow passes (cfg/pdg/sdg)
-    call_graph.py        #   the resolver-based call_graph + graph<->schema adaptation
-    <framework>/         #   the heavy framework backend (joern/wala/svf), ISOLATED in its own subpackage
-  neo4j/                 # the CO-PRIMARY projection: project() -> GraphRows -> cypher/bolt + schema catalog
-  analysis/              # the PLUGGABLE pass layer (registry + AnalysisPass base)
-  frameworks/            # entrypoint-finder base + concrete finders, built ON the pass layer
-  utils/                 # logging, progress, fs helpers — no analysis logic
+  __main__          # CLI entry: parse args -> AnalysisOptions -> call core. Thin. (references/cli-contract.md)
+  core              # ORCHESTRATOR ONLY. Delegates every stage; inlines no analysis logic.
+  options/ config/  # CLI option model; static/environment config
+  schema/           # the node/edge models — the v2 data contract (the keystone)
+  materialize/      # PARSER's prerequisite: deps -> classpath/venv/module graph (references/project-materialization.md)
+  syntactic_analysis/  # PARSER + L1 builder: the tree to callable depth + `call` nodes
+  semantic_analysis/   # RESOLVER + per-level builders
+    call_graph        #   L2: resolver-based call_graph + graph<->schema adaptation
+    dataflow/         #   L3/L4: cfg/cdg/ddg builders, then the SDG builder (per-callable modules)
+    <framework>/      #   optional heavy backend (joern/wala/svf), ISOLATED in its own subpackage
+  neo4j/            # EMITTER (co-primary): project() -> GraphRows -> cypher/bolt + schema catalog
+  analysis/         # the PLUGGABLE pass layer (registry + AnalysisPass base)
+  frameworks/       # entrypoint-finder base + concrete finders, built ON the pass layer
+  utils/            # logging, progress, fs helpers — no analysis logic
 ```
 
-The `neo4j/` subpackage is **not optional** — the Neo4j graph is a co-primary output
-(`neo4j-projection.md`), so its seam exists in the skeleton like any other, isolated behind
-`project()`.
+The two **emitters** are co-primary: the JSON serializer of `schema/` and the `neo4j/` projection
+subpackage. Neither is optional — the Neo4j graph is a first-class output
+(`references/neo4j-projection.md`), so its seam exists in the skeleton from day one.
 
-Not every language needs every box on day one (the framework backend and pass finders may ship
-empty), but the **skeleton and the seams must exist from the start**, because that is what makes
-the analyzer extensible without a rewrite.
+Not every box is filled on day one (the framework backend and pass finders may ship empty), but the
+**skeleton and seams must exist from the start** — that is what makes the analyzer grow through the
+levels, and host extensions, without a rewrite. Scaffold the empty-but-wired skeleton **once, up
+front**, before filling stages.
 
 ## The four modularity rules (each with the anti-pattern it prevents)
 
 ### 1. The orchestrator delegates; it never inlines analysis logic
-`core.py`'s `analyze()` is ~50 lines of pure delegation: build the symbol table → build the base
-call graph → cache the *base* application → `run_pipeline(app)` (the pluggable passes) → return
-the enriched app. Each phase lives in its own module.
+`core`'s `analyze()` is short, pure delegation: materialize deps → build the symbol table (L1) →
+build the call graph (L2) → run the dataflow builders (L3/L4, when in scope) → cache the *base*
+application → `run_pipeline(app)` (the pluggable passes) → return the enriched app. Each stage lives
+in its own module.
 
-> **Anti-pattern (from `codeanalyzer-ts/src/core.ts`):** a 36-line `analyze()` that inlines the
-> whole flow and hardcodes `entrypoints: {}`. There is no seam between "build the base analysis"
-> and "enrich it," so framework detection, synthetic edges, or any post-pass enrichment has
-> nowhere to plug in.
+> **Anti-pattern (`codeanalyzer-ts/src/core.ts`):** a 36-line `analyze()` that inlines the whole
+> flow and hardcodes `entrypoints: {}`. There is no seam between "build the base analysis" and
+> "enrich it," so framework detection or any post-pass enrichment has nowhere to plug in.
 >
-> **Rule:** `core` orchestrates and delegates. The post-symbol-table enrichment goes through a
-> single `run_pipeline(app, ctx)`-style call. Never hardcode `entrypoints` — populate them from
-> discovered passes.
+> **Rule:** `core` orchestrates and delegates; enrichment goes through a single `run_pipeline(app,
+> ctx)`-style call. Never hardcode `entrypoints` — populate them from discovered passes.
 
-### 2. The symbol-table builder is a cohesive unit, split by node kind
-Python's `syntactic_analysis/symbol_table_builder.py` is large (~968 lines) **but cohesive**: a
-single `SymbolTableBuilder` class whose private methods are grouped by node kind and concern —
-`_add_class`, `_callables`, `_pydecorators`, `_class_attributes`, `_callable_parameters`,
-`_call_sites`, `_module_variables`, `_cyclomatic_complexity`, the `_infer_*` resolver helpers.
-Shared resolver/project state lives on `self`; a reader finds "how are classes built?" in one
-named place.
+### 2. The per-level builders are cohesive units, split by node kind / stage
+The **L1 symbol-table builder** is the largest single piece and exactly where modularity slips.
+Python's `SymbolTableBuilder` is ~968 lines **but cohesive**: one class whose private methods are
+grouped per node kind — `_add_class`, `_callables`, `_class_attributes`, `_callable_parameters`,
+`_pydecorators`, `_call_sites`, `_module_variables`, `_cyclomatic_complexity`, plus the `_infer_*`
+resolver helpers — sharing resolver/project state on `self`. A reader finds "how are classes built?"
+in one named place. The **L3/L4 dataflow builders** split the same way — one module per stage (CFG,
+dominance/CDG, def-use/DDG, SDG), each fanning out per callable.
 
-> **Anti-pattern (from `codeanalyzer-ts/src/syntactic_analysis/builders.ts`):** ~968 lines of
-> **36+ free functions** in a flat namespace, threading state through arguments. `buildClass`,
-> `buildInterface`, `buildEnum`, `buildTypeAlias` are scattered across the file; adding a node
-> kind means touching 5–6 unrelated spots.
+> **Anti-pattern (`codeanalyzer-ts/src/syntactic_analysis/builders.ts`):** ~968 lines of **36+ free
+> functions** in a flat namespace threading state through arguments; `buildClass`/`buildInterface`/
+> `buildEnum` scattered across the file, so adding a node kind means touching 5–6 unrelated spots.
 >
-> **Rule:** Make the per-file builder a cohesive unit (a class, or a builder module with one
-> focused function *per node kind*: `build_class`, `build_callable`, `build_interface`, …). If
-> the file grows past a few hundred lines, **split per node kind into sibling modules** under
-> `syntactic_analysis/` (e.g. `class_builder`, `callable_builder`) sharing one resolver/context
-> object — do not let it stay a flat grab-bag of free functions.
+> **Rule:** each builder is a cohesive unit — a class, or a module with one focused function per node
+> kind / stage. If it grows past a few hundred lines, split per node kind into sibling modules under
+> the stage's subpackage, sharing one resolver/context object.
 
-### 3. The heavy framework backend (Joern/WALA/SVF) is isolated in its own subpackage
-Python keeps its framework backend behind a clean boundary: `semantic_analysis/<framework>/` has *four* files —
-a loader (resolve the binary), an analysis driver (build the DB + drive it), 
-a query runner (run queries + parse), and typed errors. `core.py`
-talks to one facade class and never touches the binary, the database, or a query string.
+### 3. The heavy framework backend is isolated in its own subpackage
+Framework enrichment (Joern/WALA/SVF) is the **orthogonal precision axis, not a level** (see the
+keystone). Python keeps it behind a clean boundary: `semantic_analysis/<framework>/` has four files —
+a loader (resolve the binary), an analysis driver (build/drive the DB), a query runner (run + parse),
+and typed errors. `core` talks to one facade class and never touches the binary, DB, or a query
+string.
 
-> **Anti-pattern (from `codeanalyzer-ts`'s original level-2 stub):** a single
-> 45-line stub. When level 2 is actually implemented it will accrete binary resolution, DB
-> management, query execution, and parsing into one file unless the seams are scaffolded now.
+> **Anti-pattern (`codeanalyzer-ts`'s level-2 stub):** a single 45-line stub that, when implemented,
+> accretes binary resolution, DB management, query execution, and parsing into one file.
 >
-> **Rule:** Give the framework backend its own subpackage with separate modules for binary
-> resolution, DB/driver, query execution, and errors — **even when level 2 ships stubbed.** Scaffold
-> the seams so the deep implementation drops into place instead of forcing a refactor.
+> **Rule:** give the framework backend its own subpackage with separate loader/driver/query/error
+> modules — **even when it ships stubbed** — so the deep implementation drops in without a refactor.
 
 ### 4. Extensibility is a real layer: a pass registry + a finder base
 This is the gap that most defines "not modular." Python ships a genuine plugin layer:
 
-- `analysis/_pass.py` — `AnalysisPass` ABC (`run(app, ctx) -> AnalysisResult`), plus
-  `AnalysisContext` / `AnalysisResult` / `BindingFact` data types. A pass contributes
-  *entrypoints* and/or *synthetic call edges* and declares `provides` / `requires` capability
-  tokens.
-- `analysis/registry.py` — `discover_passes()` (built-ins **plus** out-of-tree passes registered
-  under an entry-point group like `codeanalyzer.analysis_passes`), `order_passes()` (topological
-  sort by `requires`/`provides`, hard error on cycle/unsatisfied), `run_pipeline(app)` (build the
-  context, run ordered passes, merge each result into the running app before the next pass).
-- `frameworks/_base.py` — `AbstractEntrypointFinder`, a thin `AnalysisPass` subclass that
-  concrete framework finders (Flask, Django, …) extend.
+- `analysis/_pass` — the `AnalysisPass` ABC (`run(app, ctx) -> AnalysisResult`) plus
+  `AnalysisContext`/`AnalysisResult`/`BindingFact`. A pass contributes *entrypoints* and/or
+  *synthetic call edges* and declares `provides`/`requires` capability tokens.
+- `analysis/registry` — `discover_passes()` (built-ins **plus** out-of-tree passes under an
+  entry-point group), `order_passes()` (topological sort by `requires`/`provides`, hard error on
+  cycle/unsatisfied), `run_pipeline(app)` (build context, run ordered passes, merge each result into
+  the running app before the next).
+- `frameworks/_base` — `AbstractEntrypointFinder`, a thin `AnalysisPass` subclass concrete finders
+  (Flask, Django, …) extend.
 
-The base application is cached; **pass output is deliberately not cached** so out-of-tree
-enrichment can never go stale.
+The base application is cached; **pass output is deliberately not cached**, so out-of-tree enrichment
+never goes stale.
 
-> **Anti-pattern (from `codeanalyzer-ts`):** *no* `analysis/` package, *no* `frameworks/`
-> package, *no* `AnalysisPass`, *no* registry — `grep` finds zero matches. `entrypoints` is
-> hardcoded `{}`. The analyzer cannot be extended without editing core.
+> **Anti-pattern (`codeanalyzer-ts`):** *no* `analysis/`, *no* `frameworks/`, *no* `AnalysisPass`,
+> *no* registry — `grep` finds zero matches; `entrypoints` is hardcoded `{}`. The analyzer cannot be
+> extended without editing core.
 >
-> **Rule:** Scaffold the pass layer up front — `analysis/_pass.<ext>` (the `AnalysisPass`
-> abstraction + context/result types), `analysis/registry.<ext>` (discover + topo-order +
-> `run_pipeline`), and `frameworks/_base.<ext>` (the entrypoint-finder base). The built-in pass
-> list and concrete finders may start empty, but the seam and the entry-point discovery
-> mechanism must exist. **This is the part the generated TS analyzer was missing entirely — do
-> not skip it.** Note this layer is exactly where `codeanalyzer-extension-builder` plugs in; an
-> analyzer without it cannot host extensions.
-
-## How this maps onto the workflow
-
-- The skeleton is scaffolded **once, up front** (an empty-but-wired version of every box above),
-  before you fill in phases. The seams come first, not last.
-- *Symbol Table Construction* fills `syntactic_analysis/` per rule 2.
-- *Call Graph Construction* fills `semantic_analysis/call_graph` (rule 1's base graph).
-- *Level 2: framework-based analysis* fills `semantic_analysis/<framework>/` (joern/wala/svf) per
-  rule 3 — its subpackage and seams exist even when stubbed.
-- The `analysis/` + `frameworks/` pass layer (rule 4) is scaffolded with the skeleton and wired
-  into `core` via `run_pipeline`, even if no concrete pass ships in the first run.
+> **Rule:** scaffold the pass layer up front (the ABC + context/result types, the discover/topo-order/
+> `run_pipeline` registry, and the finder base). The built-in list may start empty, but the seam and
+> the discovery mechanism must exist — this is the layer the extension skill plugs into.
 
 ## Verify modularity, not just behavior
-When you report the build, confirm the skeleton is real — not aspirational:
-- `core`'s `analyze()` delegates each phase and routes enrichment through a single
-  pipeline/registry call; it inlines no per-node parsing and does not hardcode `entrypoints`.
-- the symbol-table builder is a cohesive class/module split by node kind, not a flat function pile.
+
+When you report the build, confirm the skeleton is real, not aspirational:
+
+- `core`'s `analyze()` delegates each stage through a single pipeline/registry call; it inlines no
+  per-node parsing and does not hardcode `entrypoints`.
+- each per-level builder is a cohesive class/module split by node kind or stage, not a flat function
+  pile.
 - the framework backend lives in its own subpackage with separated loader/driver/query/error seams.
-- `analysis/` (pass + registry) and `frameworks/` (finder base) exist and `core` calls the
-  registry — even if the built-in pass list is empty.
+- `analysis/` and `frameworks/` exist and `core` calls the registry — even if the built-in pass list
+  is empty.
+- both emitters exist: JSON via `schema/`, Neo4j via `neo4j/` behind a pure `project()`.
 
 A monolithic analyzer that emits valid `analysis.json` has met the schema bar and **failed the
 maintainability bar**. Both are required.

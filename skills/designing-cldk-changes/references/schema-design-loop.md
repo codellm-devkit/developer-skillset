@@ -3,7 +3,7 @@
 This is the **analyzer-side** design loop of `designing-cldk-changes` — invoked when the
 Contract-Impact Triage says a change touches an analyzer's schema output. It designs the schema;
 it does **not** implement it. Actually walking files to fill the tree is the backend's job
-(`skills/codeanalyzer-backend/references/symbol-table-construction.md`), and it runs *after* this
+(`skills/codeanalyzer-backend/references/level-1-symbol-table.md`), and it runs *after* this
 loop's decisions are made, spec'd, and issued.
 
 The **shared spine is already designed** — it is the v2 keystone (`references/canonical-schema.md`):

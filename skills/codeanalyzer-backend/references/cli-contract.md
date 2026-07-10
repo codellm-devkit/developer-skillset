@@ -1,91 +1,106 @@
-# CLI family surface
+# The codeanalyzer CLI contract
 
-The SDK facade invokes a subprocess analyzer by shelling out with a fixed set of flags. Use
-the target ecosystem's idiomatic CLI framework, but expose **these flags with these
-meanings** so one facade code path works across analyzers. Java (Picocli) and Python (Typer)
-are the references.
+The SDK facade invokes the analyzer as a subprocess by shelling out with a fixed set of flags. Use the
+target ecosystem's idiomatic CLI framework (Picocli for Java, Typer for Python, a Node CLI lib for
+TS), but expose **these flags with these meanings** so one facade code path works across every
+analyzer.
+
+## Core flags
 
 | Flag | Meaning | Notes |
 | --- | --- | --- |
-| `-i, --input <path>` | Project root to analyze | Required |
+| `-i, --input <path>` | Project root to analyze | Required (except `--emit schema`) |
 | `-o, --output <dir>` | Directory to write `analysis.json` | **When omitted, print compact JSON to stdout.** The facade relies on this |
-| `-f, --format <json\|msgpack>` | Serialization format | Default `json` |
-| `-a, --analysis-level <1\|2\|3\|4>` | 1 = symbol table; 2 = + **resolver** call graph (cheap); 3 = + **intraprocedural** CFG/DFG/PDG (heavy, AST-only); 4 = + **interprocedural** SDG + clients (heaviest, needs points-to oracle) — `dataflow-graphs.md` | Java style. Python instead uses toggles; either is fine as long as the cheap symbol-table-only run is the default |
-| `--joern` (or similar) | Add the **framework-based** (heavy) call graph | Separate toggle, **not** an `-a` level; off by default |
-| `--graphs <cfg,dfg,pdg,sdg>` | Scope which dataflow graphs are emitted within the level | `cfg,dfg,pdg` need `-a 3`; `sdg` needs `-a 4` (requesting `sdg` at `-a 3` is a flag error). Default: all rungs at/below the level. Strict flag validation |
-| `--graph-field-depth <k>` | Access-path k-limit for dataflow (L3/L4) | Default 3; mandatory for L4 fixpoint termination |
+| `-f, --format <json\|msgpack>` | Serialization format | Default `json`; only `json` need be implemented — see Flag validation |
+| `-a, --analysis-level <1\|2\|3\|4>` | Progressive analysis depth (the canonical levels) | See the level table below. `-a 1` (symbol table only) is the default |
+| `--joern` (or similar) | Add **framework** call-graph enrichment | A **separate toggle, not an `-a` level** (the orthogonal precision axis); off by default |
+| `--graph-field-depth <k>` | Access-path k-limit for L3/L4 dataflow | Default 3; mandatory for L4 fixpoint termination |
 | `-t, --target-files <paths>` | Restrict analysis to specific files | Incremental analysis |
 | `--skip-tests / --include-tests` | Skip test trees | Default skip |
-| `--eager / --lazy` | Force clean rebuild vs reuse cache | Default lazy |
-| `-c, --cache-dir <dir>` | Where caches/intermediate DBs live | |
-| `-j, --jobs <n>` | Worker parallelism | Default: CPU cores. Output must be **byte-identical** across `-j` values (`dataflow-construction.md § Parallel execution model`); applies to the level-1 per-file build too |
-| `-v` | Verbosity (repeatable) | |
+| `--eager / --lazy` | Force clean rebuild vs. reuse cache | Default lazy |
+| `-c, --cache-dir <dir>` | Where caches / intermediate DBs live | |
+| `-j, --jobs <n>` | Worker parallelism | Default: CPU cores. Output must be **byte-identical** across `-j` values (`references/testing-and-validation.md`); applies to the L1 per-file build and the L3/L4 per-callable fan-out alike |
+| `-v` | Verbosity (repeatable) | Diagnostics to **stderr** only |
 
-**Neo4j projection flags** (optional second output surface — full spec in
-`neo4j-projection.md`). Present on all mature analyzers; add once level-1 JSON is solid:
+### The `-a` level ladder (the canonical levels)
 
-| Flag | Meaning | Notes |
+`-a` is a single progressive axis mirroring
+`skills/designing-cldk-changes/references/canonical-schema.md`; each level *implies* the ones below it:
+
+| `-a` | Adds | Reference |
 | --- | --- | --- |
-| `--emit <json\|neo4j\|schema>` | Output target | `json` (default) → `analysis.json`; `neo4j` → `graph.cypher` or live push **at full depth — `-a`/`--graphs` do not apply and combining them errors** (`neo4j-projection.md § Depth rule`); `schema` → static `schema.neo4j.json` (needs no `-i`) |
-| `--neo4j-uri <uri>` | Live Bolt push target | Omit → write `graph.cypher` file. Env `NEO4J_URI` |
-| `--neo4j-user <user>` | Username | Env `NEO4J_USERNAME`, default `neo4j` |
-| `--neo4j-password <pw>` | Password | Env `NEO4J_PASSWORD`, default `neo4j` |
-| `--neo4j-database <db>` | Database name | Env `NEO4J_DATABASE`, optional |
-| `--app-name <name>` | `:Application` anchor name | Default: input dir name. The SDK's Neo4j backend must use the same name |
+| `1` | symbol table — the tree to callable depth + `call` nodes | `references/level-1-symbol-table.md` |
+| `2` | `call_graph` edges (resolver-based); backfills `callee` | `references/level-2-call-graph.md` |
+| `3` | intraprocedural dataflow — `body` statements + `cfg`/`cdg`/`ddg` (syntactic) | `references/level-3-intraprocedural-dataflow.md` |
+| `4` | interprocedural SDG — synthetic vertices + `param_in`/`param_out`/`summary` + semantic `ddg` | `references/level-4-interprocedural-sdg.md` |
 
-Precedence for the neo4j flags: **explicit flag > env var > default**.
+Framework enrichment (`--joern`/…) is **orthogonal** to `-a` — its edges merge into `call_graph` with
+provenance; it is not a level. Don't conflate the two axes.
 
-## The output contract
-The only thing the facade depends on is that, after a successful run, **`<output>/analysis.json`
-exists and conforms to `canonical-schema.md`** (or, with no `-o`, the same JSON is on
-stdout). Everything else — cache files, framework databases, build artifacts — is internal.
+## Neo4j projection flags
 
-## Flag validation requirements
+The second output surface (full spec in `references/neo4j-projection.md`); present on all mature
+analyzers.
 
-Flags that accept a fixed vocabulary must be validated — never silently ignored.
+| Flag | Meaning |
+| --- | --- |
+| `--emit <json\|neo4j\|schema>` | Output target. `json` (default) → `analysis.json`; `neo4j` → `graph.cypher` or a live Bolt push **at full implemented depth**; `schema` → the static `schema.neo4j.json` contract (needs no `-i`) |
+| `--neo4j-uri <uri>` | Live Bolt push target. Omit → write `graph.cypher`. Env `NEO4J_URI` |
+| `--neo4j-user <user>` | Env `NEO4J_USERNAME`, default `neo4j` |
+| `--neo4j-password <pw>` | Env `NEO4J_PASSWORD`, default `neo4j` |
+| `--neo4j-database <db>` | Env `NEO4J_DATABASE`, optional |
+| `--app-name <name>` | `:Application` anchor name. Default: input dir name. The SDK's Neo4j backend must use the **same** name |
 
-**`-f, --format <json|msgpack>`** — Only `json` is currently required to be implemented. If
-`msgpack` or any other value is passed and not implemented, return an explicit error:
+Precedence for these: **explicit flag > env var > default**.
+
+**Levels gate the JSON path only.** With `--emit neo4j` the analyzer always runs at maximum
+implemented depth and projects the full graph; passing `-a`/`--graph-field-depth` alongside `--emit
+neo4j` is an **explicit error** (`references/neo4j-projection.md § Depth rule`).
+
+## Flag validation
+
+Any flag whose value is unrecognized or unimplemented **must return a non-zero exit with a clear
+message** — never silently ignore or fall back. Silent fallback is worse than an error: the caller
+asked for one thing, got another, and processes it wrongly. The SDK passes flags like `--format` and
+`--emit` straight through, so it has no way to detect a silently-ignored flag. Example:
+
 ```
 error: msgpack output is not yet implemented; use --format json
 ```
-Silently falling back to JSON is worse than an error: the caller asked for msgpack,
-received JSON, and may process the output incorrectly.
 
-The general rule: any flag whose value is unrecognized or unimplemented **must** return a
-non-zero exit with a clear message. The Python SDK wrapper passes flags like the format and
-`--emit` target straight through to the binary; if the binary silently accepts and ignores a
-flag, the SDK has no way to know the output differs from what was requested.
+## Exit codes and stdout/stderr discipline
 
-## Level selection
-Two orthogonal axes, don't conflate them:
-- **`-a 1|2`** scopes the **cheap, resolver-based (level-1)** analysis: `-a 1` = symbol table
-  only; `-a 2` = + the resolver call graph. The resolver call graph is cheap (the resolver is
-  already loaded), so `-a 2` is still the lightweight tier — keep `-a 1` (symbol table only) as
-  the default.
-- **A separate flag** (`--joern`/…) turns on the **heavy, framework-based (level-2)**
-  backend. Off by default so the cheap path stays cheap.
-- **`-a 3`** adds the **native intraprocedural graphs** (CFG/DFG/PDG per function —
-  `dataflow-graphs.md`), scoped by `--graphs`. Implies `-a 2`. Heavy but AST-only and per-callable
-  parallel; needs no points-to oracle.
-- **`-a 4`** adds the **interprocedural SDG** and clients (slicing, taint). Implies `-a 3`. The
-  heaviest tier — the only one that needs the points-to oracle and the whole-program summary
-  fixpoint. Both stay orthogonal to the framework toggle.
-- **Levels gate the JSON path only.** With `--emit neo4j` the analyzer always runs at maximum
-  implemented depth and projects the full SDG; passing `-a`/`--graphs` alongside it is an
-  explicit error (`neo4j-projection.md § Depth rule`).
+The facade depends on a strict channel split:
 
-The SDK passes its `AnalysisLevel` enum through to the `-a` flag; the framework backend is its
-own opt-in.
+- **Exit `0`** — a successful run: `<output>/analysis.json` exists and conforms to the keystone (or,
+  with no `-o`, the same JSON is on stdout).
+- **Non-zero exit** — a flag/validation error (unimplemented `--format`, `-a`/`--emit` conflict,
+  missing required `-i`) or a fatal internal error. Fatal only; **partial resolution is not a failure**
+  — a symbol table with some unresolved types still exits `0` (project-materialization degrades
+  gracefully).
+- **stdout is the data channel.** When `-o` is omitted, stdout carries **only** the analysis JSON —
+  nothing else, so the facade can parse it directly. No log lines, no progress bars on stdout, ever.
+- **stderr is the diagnostics channel.** All logging, progress (`-v`), warnings, and error messages go
+  to stderr, so they never corrupt the JSON the facade reads.
+
+## The output contract
+
+The only thing the facade depends on is that, after a successful run, **`<output>/analysis.json`
+exists and conforms to the keystone** (or the same JSON is on stdout). Everything else — cache files,
+framework databases, build artifacts — is internal.
 
 ## Example invocations the facade will issue
+
 ```
 # symbol table only, JSON to a temp dir
 codeanalyzer-ts -i /path/to/project -o /tmp/cldk-xyz -a 1
 
-# symbol table + resolver call graph (both cheap, level 1), with caching
+# symbol table + call graph, with caching
 codeanalyzer-ts -i /path/to/project -o /tmp/cldk-xyz -a 2 -c ~/.cldk/ts-cache
 
-# single-file incremental, stdout
+# intraprocedural dataflow, deterministic single-worker (debug)
+codeanalyzer-ts -i /path/to/project -o /tmp/cldk-xyz -a 3 -j 1
+
+# single-file incremental, JSON to stdout
 codeanalyzer-ts -i /path/to/project -t src/foo.ts
 ```

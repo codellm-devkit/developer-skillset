@@ -61,7 +61,7 @@ The `codeanalyzer-<lang>` backend is a **pure graph provider**: at `-a 3`/`-a 4`
 dependence-graph substrate — the CPG's intra-callable `cfg`/`cdg`/`ddg`/`summary` edges plus the
 cross-callable `param_in`/`param_out` (the SDG), with transitive `SUMMARY` edges — and nothing
 more. It deliberately does **not** emit a `taint_flows` section or run a slice
-(`codeanalyzer-backend`'s `dataflow-graphs.md § Provider/client boundary`). **Slicing, taint, and
+(`codeanalyzer-backend`'s `references/level-4-interprocedural-sdg.md § Provider/client boundary`). **Slicing, taint, and
 reachability queries live here, in the SDK**, as part of the facade's query surface:
 
 - **Backward/forward slice** and **taint** are reachability walks over the emitted graph —
