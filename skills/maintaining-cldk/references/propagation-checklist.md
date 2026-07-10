@@ -31,7 +31,7 @@ pinned by a version-locked dependency (`python-sdk`'s
 reach a single SDK user until:
 
 1. the analyzer cuts a release with the fix (per
-   `skills/codeanalyzer-backend/references/packaging-and-release.md`), and
+   `skills/finishing-cldk-work/references/packaging-and-release.md`), and
 2. the pinning SDK bumps its dependency to that version.
 
 State explicitly whether a pin bump is needed, and in which SDK(s). "The fix
