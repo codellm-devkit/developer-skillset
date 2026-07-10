@@ -19,7 +19,7 @@ else's machine does not satisfy the HARD-GATE.
 | Gate | Command | What it proves |
 | --- | --- | --- |
 | Fixture suite | `go test ./...` (or the ecosystem equivalent — `pytest`, `mvn test`, `cargo test`) | Per-level unit/fixture assertions pass, up to the analyzer's current `max_level`. |
-| Schema conformance | Run the CLI at the target level (`codeanalyzer-<lang> -i testdata/fixture -a <1\|2\|3\|4> -o out/`), then `python -c "import json; from cldk_models import Application; Application(**json.load(open('out/analysis.json')))"` | Output validates against the shared CPG models — not just "the binary ran." |
+| Schema conformance | Run the CLI at the target level (`codeanalyzer-<lang> -i testdata/fixture -a <1\|2\|3\|4> -o out/`), then `python -c "import json; from cldk.models.cpg.models import Application; Application(**json.load(open('out/analysis.json')))"` | Output validates against the shared CPG models — not just "the binary ran." |
 | Monotonicity | Run `-a 1`, `-a 2`, `-a 3`, `-a 4` on the same fixture; diff the JSON | `json(-a 1) ⊆ json(-a 2) ⊆ json(-a 3) ⊆ json(-a 4)` — no level rewrites a lower level's facts. |
 | Determinism | `codeanalyzer-<lang> -i testdata/fixture -j 1 -o j1/` vs `... -j <N> -o jN/`; diff | `-j N` output is byte-identical to `-j 1`. |
 | Cross-projection | Compare `--emit neo4j` node/edge counts (at full depth) against the JSON at `max_level` | The two projections agree, modulo documented `HAS_*` containment edges. |
